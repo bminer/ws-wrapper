@@ -1,0 +1,58 @@
+<html>
+	<head>
+		<title>ws-wrapper test</title>
+		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/zepto/1.2.0/zepto.min.js"></script>
+		<script type="text/javascript" src="/client.js"></script>
+		<style type="text/css">
+			body {
+				font-family: sans-serif;
+			}
+			button, input {
+				padding: 5px 10px;
+			}
+			#messageList {
+				margin: 0 auto;
+				overflow: auto;
+				border: 1px #ccc solid;
+				padding: 5px;
+				height: 300px;
+			}
+			.message {
+				margin: 0;
+			}
+			.message > .from {
+				font-weight: bold;
+				color: blue;
+			}
+			.message > .from.me {
+				color: red;
+			}
+			.message > .from.system {
+				color: purple;
+			}
+			#newMessage {
+				padding: 30px 0px;
+				display: none;
+			}
+			#logoutButton {
+				display: none;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>ws-wrapper test</h1>
+		<section id="login">
+			<input type="text" id="username" placeholder="Enter your username"/>
+			<button id="loginButton">Log in</button>
+			<button id="logoutButton">Log out</button>
+		<section>
+		<section id="messages">
+			<h2>Messages</h2>
+			<div id="messageList"></div>
+		</section>
+		<form id="newMessage">
+			<input type="text" id="message" placeholder="Enter your message"/>
+			<button type="submit" id="sendButton">Send</button>
+		</form>
+	</body>
+</html>

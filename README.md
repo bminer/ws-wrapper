@@ -286,4 +286,5 @@ The following message types are defined by ws-wrapper:
 
 If the message received by the WebSocket is not valid JSON or if the parsed
 Object does not match one of the above message types, then the message is
-simply ignored by ws-wrapper.
+simply ignored by ws-wrapper.  Also if the JSON message contains a `ws-wrapper`
+property with the value `false`, the message will be ignored.

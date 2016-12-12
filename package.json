@@ -1,0 +1,40 @@
+{
+	"name": "ws-wrapper",
+	"version": "1.0.0",
+	"description": "Lightweight WebSocket wrapper lib with socket.io-like event handling, requests, and channels",
+	"main": "./lib/wrapper.js",
+	"browser": {
+		"events": "eventemitter3"
+	},
+	"dependencies": {
+		"eventemitter3": ">=2 <3"
+	},
+	"devDependencies": {
+		"koa": ">=1.2 <2",
+		"koa-router": ">=5.4 <6",
+		"node-module-concat": ">=1.5 <2",
+		"ws": "^1.1.1"
+	},
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/bminer/ws-wrapper.git"
+	},
+	"keywords": [
+		"websocket",
+		"ws",
+		"event",
+		"handling",
+		"channels",
+		"request",
+		"namespace"
+	],
+	"author": "Blake C. Miner",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/bminer/ws-wrapper/issues"
+	},
+	"homepage": "https://github.com/bminer/ws-wrapper#readme"
+}

@@ -27,13 +27,22 @@ npm install ws-wrapper
 
 ## Usage
 
+WebSocketWrapper is a CommonJS module, so it works in Node.js and in the
+browser if you use a tool like [browserify](http://browserify.org/) or
+[module-concat](https://github.com/bminer/module-concat).
+
 Client-side
 
 ```javascript
+// Assuming WebSocketWrapper is available to this scope...
 var socket = new WebSocketWrapper(new WebSocket(...) );
 ```
 
 Server-side
+
+Use [ws-server-wrapper](https://github.com/bminer/ws-server-wrapper) to wrap
+the WebSocketServer, or do something like this:
+
 ```javascript
 const WebSocketServer = require("ws").Server
 	, WebSocketWrapper = require("ws-wrapper");
@@ -55,10 +64,10 @@ Server-side Example:
 const WebSocketServer = require("ws").Server
 	, WebSocketWrapper = require("ws-wrapper");
 var wss = new WebSocketServer({port: 3000});
-var sockets = [];
+var sockets = new Set();
 wss.on("connection", (socket) => {
 	var socket = new WebSocketWrapper(socket);
-	sockets.push(socket);
+	sockets.add(socket);
 	socket.on("msg", function(from, msg) {
 		// `this` refers to the WebSocketWrapper instance
 		console.log(`Received message from ${from}: ${msg}`);
@@ -68,9 +77,7 @@ wss.on("connection", (socket) => {
 		});
 	});
 	socket.on("disconnect", () => {
-		var idx = sockets.indexOf(socket);
-		if(idx >= 0)
-			sockets.splice(idx, 1);
+		sockets.delete(socket);
 	});
 });
 ```
@@ -113,13 +120,13 @@ const fs = require("fs")
 	, WebSocketServer = require("ws").Server
 	, WebSocketWrapper = require("ws-wrapper");
 var wss = new WebSocketServer({port: 3000});
-var sockets = [];
+var sockets = new Set();
 wss.on("connection", (socket) => {
-	var socket = new WebSocketWrapper(socket);
-	sockets.push(socket);
+	socket = new WebSocketWrapper(socket);
+	sockets.add(socket);
 	socket.on("userCount", () => {
 		// Return value is sent back to the client
-		return sockets.length;
+		return sockets.size;
 	});
 	socket.on("readFile", (path) => {
 		// We can return a Promise that eventually resolves
@@ -135,9 +142,7 @@ wss.on("connection", (socket) => {
 		});
 	});
 	socket.on("disconnect", () => {
-		var idx = sockets.indexOf(socket);
-		if(idx >= 0)
-			sockets.splice(idx, 1);
+		sockets.delete(socket);
 	});
 });
 ```
@@ -170,15 +175,30 @@ Class: WebSocketWrapper
 A WebSocketWrapper simply wraps around a WebSocket to give you well-deserved
 functionality. :)
 
-`socket = new WebSocketWrapper(webSocketInstance);`
+`socket = new WebSocketWrapper(webSocketInstance[, options]);`
 
+Constructs a new WebSocketWrapper, and binds it to the native WebSocket
+instance.
+
+- `webSocketInstance` - the native WebSocket instance
+- `options`
+	- `debug` - set to `true` to print debugging messages to `console.log`
+
+Events
+
+- Event: "open"
+	- `event` - The (worthless) event from the native WebSocket instance
 - Event: "error"
 	- `event` - The Error event from the native WebSocket instance
 - Event: "message"
+	- `event` - The [Message event](https://developer.mozilla.org/en-US/docs/Web/API/MessageEvent)
+			from the native WebSocket instance
 	- `data` - The message data (same as `event.data`)
-	- `event` - The Message event from the native WebSocket instance
-- Event: "disconnect"
-	- `event` - The Close event from the native WebSocket instance
+- Event: "close" / "disconnect"
+	- `event` - The [Close event](https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent)
+			from the native WebSocket instance
+	- `wasOpen` - `true` if the "open" event was fired on the native WebSocket
+		instance before the "close" event was fired.
 
 The EventEmitter-like API looks like this:
 
@@ -227,15 +247,50 @@ The EventEmitter-like API looks like this:
 	remote end.
 
 Channel API:
- - `socket.of(channelName)`
+- `socket.of(channelName)`
  	Returns the channel with the specified `channelName`.  Every channel has the
  	same EventEmitter-like API as described above for sending and handling
  	channel-specific events and requests.
 
+Other methods and properties:
+
+By default, the WebSocketWrapper provides a queue for data to be sent.  Once the
+WebSocket is open, this queue is flushed until the connection is lost.  The
+following methods allow one to re-bind a new WebSocket or clear the send queue.
+
+- `socket.abort()`
+	Clears the send queue for this WebSocketWrapper and rejects all Promises for
+	pending requests.
+- `socket.bind(nativeWebSocket)`
+	Binds this WebSocketWrapper to a new WebSocket.  This can be useful when
+	socket reconnection logic needs to be implemented.  Instead of creating a
+	new WebSocketWrapper each time a WebSocket is disconnected, one can simply
+	bind a new WebSocket to the WebSocketWrapper.  In this way, data queued to
+	be sent while the connection was dead will be sent over the new WebSocket
+	passed to the `bind` function.
+- `socket.isConnecting` - checks the native WebSocket `readyState` and is `true`
+	if and only if the state is CONNECTING.
+- `socket.isConnected` - checks the native WebSocket `readyState` is `true`
+	if and only if the state is CONNECTED.
+- `socket.send(data)`
+	If connected, calls the native WebSocket's `send` method; otherwise, the
+	data is added to the WebSocketWrapper's send queue.
+- `socket.disconnect()`
+	Closes the native WebSocket
+- `socket.set(key, value)`
+	Saves user data specific to this WebSocketWrapper
+- `socket.get(key)`
+	Retrieves user data.  See `socket.set(key, value)` above.
+
+`WebSocketWrapper.MAX_SEND_QUEUE_SIZE`
+	The maximum number of items allowed in the send queue.  If a user tries to
+	send more messages than this number while a WebSocket is not connected,
+	errors will be thrown.  Defaults to 10; changes affect all WebSocketWrapper
+	instances.
 
 ## Protocol
 
-All data passed over the WebSocket should be valid JSON.  [ws-wrapper]
+All data passed over the native WebSocket should be valid JSON.  [ws-wrapper]
 (https://github.com/bminer/ws-wrapper/) will parse the JSON string and determine
 the message type based on the properties in the parsed Object.
 

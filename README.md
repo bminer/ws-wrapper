@@ -31,6 +31,12 @@ WebSocketWrapper is a CommonJS module, so it works in Node.js and in the
 browser if you use a tool like [browserify](http://browserify.org/) or
 [module-concat](https://github.com/bminer/module-concat).
 
+Since version 1.2, The WebSocketChannel class uses
+[WeakMaps](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakMap).
+WeakMaps [work in all modern browsers](http://kangax.github.io/compat-table/es6/#test-WeakMap),
+but if you need it to work on older browsers, try using
+[this shim](https://github.com/Benvie/WeakMap).
+
 Client-side
 
 ```javascript

@@ -303,7 +303,7 @@ The following message types are defined by ws-wrapper:
 1. **Simple Event** - Identified by an Object with `a` key but no `i` key.
 	The channel name is optional.
 
-  ```javascript
+	```javascript
 	{
 		"c": "channel_name",
 		"a": ["event_name", "first_arg", "second_arg", "last_arg"]
@@ -314,7 +314,7 @@ The following message types are defined by ws-wrapper:
 1. **Request** - Identified by an Object with `a` and `i` keys where `i` refers
 	to the unique request identifier.  The channel name is optional.
 
-  ```javascript
+	```javascript
 	{
 		"i": 123,
 		"c": "channel_name",
@@ -326,7 +326,7 @@ The following message types are defined by ws-wrapper:
 1. **Response (Resolution)** - Identified by an Object with `i` and `d` keys
 	where `i` is the request identifier and `d` is the response data.
 
-  ```javascript
+	```javascript
 	{
 		"i": 123,
 		"d": {"resolved": "data", "hello": "world"}
@@ -336,7 +336,7 @@ The following message types are defined by ws-wrapper:
 	where `i` is the request identifier and `e` is the error message to be used
 	when rejecting the response Promise.
 
-  ```javascript
+	```javascript
 	{
 		"i": 123,
 		"e": "error message",

@@ -187,6 +187,15 @@ instance.
 - `webSocketInstance` - the native WebSocket instance
 - `options`
 	- `debug` - set to `true` to print debugging messages to `console.log`
+	- `errorToJSON` - function to serialize Errors over the WebSocket.  In
+		Node.js, the default is to send only the `message` property of
+		the Error (for security reasons).  Errors that occur on the
+		browser include all properties.
+	- `requestTimeout` - maximum delay in ms. that the WebSocketWrapper
+		will wait until rejecting the Promise of a pending request.
+		Defaults to `null`, which means that there will be no timeout.
+		This option is recommended for servers because clients who do
+		not fulfill pending requests can cause memory leaks.
 
 Events
 
@@ -212,13 +221,20 @@ The EventEmitter-like API looks like this:
 	`eventName` is received by the WebSocket, the `listener` is called.
 
 	Values returned by the `listener` callback are used to respond to
-	requests.  If the inbound message is a simple event (not a request), the
-	return value of the `listener` is ignored.
+	requests (see `socket.request`).  If the return value of the `listener`
+	is a `Promise`, the response to the request will be sent once the Promise
+	is resolved or rejected; otherwise, the return value of the `listener` is
+	sent back to the remote end immediately.
 
-	If the return value of the `listener` is a `Promise`, the response to
-	the request will be sent once the Promise is resolved or rejected;
-	otherwise, the return value of the `listener` is sent back to the remote
-	end immediately.
+	If the inbound message is a simple event (see `socket.emit`), the return
+	value of the `listener` is ignored.  It is also "safe" for the `listener`
+	to return a `Promise` even if the inbound message is a "simple" event. If
+	the returned `Promise` is rejected, an unhandled rejection will not occur;
+	rather, the result of the Promise is just ignored.
+
+	If the `listener` throws an Error, this Error will propagate up the stack
+	as expected, and if the inbound message was a request, the Error is sent
+	back to the remote end as a response rejection.
 - `socket.once(eventName, listener)`
 	Adds a one time `listener` function for the event named `eventName`.
 - `socket.removeListener(eventName, listener)`
@@ -249,6 +265,16 @@ The EventEmitter-like API looks like this:
 	**Note**: If a request is sent, but there is no remote event listener to respond
 	to the request, a response rejection is immediately sent back by the
 	remote end.
+- `socket.timeout(tempTimeoutInMs)`
+	Temporarily sets the `requestTimeout` to `tempTimeoutInMs` for the next request
+	only.  This returns `socket` to allow chaining.  Typical usage:
+	```javascript
+	// The next request will be rejected if there is no response for 5 secs.
+	let promise = socket.timeout(5 * 1000).request("readFile", "/etc/issue");
+	```
+
+The above EventEmitter functions like `on` and `once` are chainable (as
+appropriate).
 
 Channel API:
 - `socket.of(channelName)`
@@ -333,17 +359,21 @@ The following message types are defined by ws-wrapper:
 	}
 	```
 1. **Response (Rejection)** - Identified by an Object with `i` and `e` keys
-	where `i` is the request identifier and `e` is the error message to be used
-	when rejecting the response Promise.
+	where `i` is the request identifier and `e` is the error Object to be used
+	when rejecting the response Promise.  If `_` is set, the `e` Object is
+	converted into an Error instance upon receipt.
 
 	```javascript
 	{
 		"i": 123,
-		"e": "error message",
+		"e": {"message": "error message"},
+		"_": 1
 	}
 	```
 
 If the message received by the WebSocket is not valid JSON or if the parsed
 Object does not match one of the above message types, then the message is
 simply ignored by ws-wrapper.  Also if the JSON message contains a `ws-wrapper`
-property with the value `false`, the message will be ignored.
+property with the value `false`, the message will be ignored.  This allows
+other libraries to use the same WebSocket and send messages that will not be
+processed by ws-wrapper.

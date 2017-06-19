@@ -1,6 +1,6 @@
 {
 	"name": "ws-wrapper",
-	"version": "1.3.0",
+	"version": "1.3.1",
 	"description": "Lightweight WebSocket wrapper lib with socket.io-like event handling, requests, and channels",
 	"main": "./lib/wrapper.js",
 	"browser": {

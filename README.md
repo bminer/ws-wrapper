@@ -320,8 +320,8 @@ following methods allow one to re-bind a new WebSocket or clear the send queue.
 
 ## Protocol
 
-All data passed over the native WebSocket should be valid JSON.  [ws-wrapper]
-(https://github.com/bminer/ws-wrapper/) will parse the JSON string and determine
+All data passed over the native WebSocket should be valid JSON.
+[ws-wrapper](https://github.com/bminer/ws-wrapper/) will parse the JSON string and determine
 the message type based on the properties in the parsed Object.
 
 The following message types are defined by ws-wrapper:

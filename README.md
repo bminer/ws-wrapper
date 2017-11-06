@@ -3,6 +3,15 @@
 Lightweight [Web Socket](https://en.wikipedia.org/wiki/WebSocket) lib with
 socket.io-like event handling, Promise-based requests, and channels.
 
+## What?
+
+Much like Socket.io, this library provides a protocol and API that sits on top
+of native WebSockets. Rather than passing raw messages through the WebSocket
+via [`WebSocket.send()`](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket#send()),
+this library allows you to pass JSON data over the sockets and trigger event
+handlers on the remote end. There is also a Promise-based request/response API,
+as well.
+
 ## Why?
 
 Because lightweight is sometimes what you want.
@@ -31,8 +40,11 @@ WebSocketWrapper is a CommonJS module, so it works in Node.js and in the
 browser if you use a tool like [browserify](http://browserify.org/) or
 [module-concat](https://github.com/bminer/module-concat).
 
-This module uses ES6 classes.  If you need this to work in IE or another old,
-decrepit browser, try using a code transpiler like
+Check out the [example-app](https://github.com/bminer/ws-wrapper/tree/master/example-app)
+for a sample chat application.
+
+Note: This module uses ES6 classes.  If you need this to work in IE or another
+old, decrepit browser, try using a code transpiler like
 [Babel](https://babeljs.io/).
 
 Client-side
@@ -40,12 +52,15 @@ Client-side
 ```javascript
 // Assuming WebSocketWrapper is available to this scope...
 var socket = new WebSocketWrapper(new WebSocket(...) );
+// Now use the WebSocketWrapper API... `socket.emit` for example
+// See examples below...
 ```
 
 Server-side
 
 Use [ws-server-wrapper](https://github.com/bminer/ws-server-wrapper) to wrap
-the WebSocketServer, or do something like this:
+the WebSocketServer.  Or, you can wrap the WebSocket once a new WebSocket
+connects like this:
 
 ```javascript
 const WebSocketServer = require("ws").Server

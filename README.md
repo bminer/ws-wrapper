@@ -417,3 +417,14 @@ simply ignored by ws-wrapper.  Also if the JSON message contains a `ws-wrapper`
 property with the value `false`, the message will be ignored.  This allows
 other libraries to use the same WebSocket and send messages that will not be
 processed by ws-wrapper.
+
+## Auto-Reconnect
+
+ws-wrapper does not implement auto-reconnect functionality out of the box.  For
+those who want it (*almost* everyone), I have written some sample code to show
+how easy it is to add.
+
+[How to implement auto-reconnect for ws-wrapper](https://github.com/bminer/ws-wrapper/wiki/Client-side-Auto-Reconnect)
+
+If someone wants to make an npm package for the auto-reconnect feature, I'd be
+happy to list it here, but it will probably never be a core ws-wrapper feature.

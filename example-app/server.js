@@ -1,12 +1,15 @@
 /* This chat server uses "ws" for Node.js WebSockets and the "koa" web
 	framework. "node-module-concat" is used to bundle the client-side code at
 	run-time.
+
+	This example does *NOT* use ws-server-wrapper.  For an example using
+	ws-server-wrapper, visit the ws-server-wrapper Github repo.
 */
 const http = require("http")
 	, fs = require("fs")
 	, WebSocketServer = require("ws").Server
-	, WebSocketWrapper = require("../lib/wrapper")
-	, moduleConcat = require("node-module-concat")
+	, WebSocketWrapper = require("../")
+	, moduleConcat = require("module-concat")
 	, koa = require("koa")
 	, router = require("koa-router")();
 
@@ -26,10 +29,12 @@ socketServer.on("connection", function(socket) {
 	sockets.push(socket);
 	// Setup event handlers on the socket
 	socket.of("chat").on("login", (username) => {
-		if(username === "system" || users[username] && users[username] !== socket)
+		if(username === "system" ||
+			(users[username] && users[username] !== socket) )
+		{
 			// Error is sent back to the client
 			throw new Error(`Username '${username}' is taken!`);
-		else {
+		} else {
 			// Notify all other users
 			for(var i in users) {
 				users[i].of("chat").emit("message", "system", username +
@@ -92,12 +97,11 @@ router.get(["/client.js"], function* () {
 });
 
 // Build client.js using "node-module-concat"
-moduleConcat(__dirname + "/client.js", __dirname + "/client_build.js", {
-	"includeNodeModules": true
-}, function(err, files) {
+moduleConcat(__dirname + "/client.js", __dirname + "/client_build.js", function(err, stats) {
 	if(err) {
 		throw err;
 	}
+	const files = stats.files;
 	console.log(`${files.length} files combined into build:\n`, files);
 
 	// Start the server after building client_build.js

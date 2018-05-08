@@ -319,7 +319,8 @@ Channel API:
 - `socket.of(channelName)`
  	Returns the channel with the specified `channelName`.  Every channel has the
  	same EventEmitter-like API as described above for sending and handling
- 	channel-specific events and requests.
+ 	channel-specific events and requests.  A channel also has a read-only `name`
+	property.
 
 Other methods and properties:
 

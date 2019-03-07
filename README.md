@@ -236,7 +236,7 @@ instance.
 
 Events
 
-- Event: "open"
+- Event: "open" / "connect"
 	- `event` - The (worthless) event from the native WebSocket instance
 - Event: "error"
 	- `event` - The Error event from the native WebSocket instance

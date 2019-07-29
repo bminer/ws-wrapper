@@ -1,6 +1,6 @@
 {
 	"name": "ws-wrapper",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"description": "Lightweight WebSocket wrapper lib with socket.io-like event handling, requests, and channels",
 	"main": "./lib/wrapper.js",
 	"browser": "./dist/index.js",
@@ -13,7 +13,7 @@
 		"koa": ">=1.2 <2",
 		"koa-router": ">=5.4 <6",
 		"module-concat": ">=2 <3",
-		"ws": "^1.1.1"
+		"ws": ">=3.3.1 <4"
 	},
 	"scripts": {
 		"prepublish": "npm run concat && npm run babel",

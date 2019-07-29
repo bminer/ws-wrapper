@@ -16,7 +16,7 @@ const http = require("http")
 // Create new HTTP server using koa and a new WebSocketServer
 let app = koa()
 	, server = http.createServer(app.callback() )
-	, socketServer = WebSocketServer({server: server});
+	, socketServer = new WebSocketServer({server: server});
 
 // Save all connected `sockets`
 var sockets = [];

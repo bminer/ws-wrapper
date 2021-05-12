@@ -1,83 +1,88 @@
-"use strict";
+"use strict"
 
-const WebSocketWrapper = require("../lib/wrapper");
+const WebSocketWrapper = require("../lib/wrapper")
 
 // Create WebSocketWrapper
-window.socket = new WebSocketWrapper(
-	new WebSocket("ws://" + location.host)
-);
-socket.on("disconnect", function(wasOpen) {
+window.socket = new WebSocketWrapper(new WebSocket("ws://" + location.host))
+socket.on("disconnect", function (wasOpen) {
 	// Check `wasOpen` flag, so we don't try to logout on each disconnection
-	if(wasOpen)
-		logout();
+	if (wasOpen) {
+		logout()
+	}
 	// Auto-reconnect
-	console.log("Reconnecting in 5 secs...");
+	console.log("Reconnecting in 5 secs...")
 	setTimeout(() => {
-		socket.bind(new WebSocket("ws://" + location.host) );
-	}, 5000);
-});
+		socket.bind(new WebSocket("ws://" + location.host))
+	}, 5000)
+})
 socket.on("error", () => {
-	socket.disconnect();
-});
-socket.of("chat").on("message", addMessage);
+	socket.disconnect()
+})
+socket.of("chat").on("message", addMessage)
 
 function addMessage(fromStr, msg) {
 	// Add a message to the DOM
-	let p = $('<p class="message">');
-	let from = $('<span class="from">');
-	if(fromStr === "system")
-		from.addClass("system");
-	else if(fromStr === $("#username").val() )
-		from.addClass("me");
-	from.append(fromStr + ":");
-	p.append(from);
-	p.append(" " + msg);
-	let list = $("#messageList").append(p)[0];
+	let p = $('<p class="message">')
+	let from = $('<span class="from">')
+	if (fromStr === "system") {
+		from.addClass("system")
+	} else if (fromStr === $("#username").val()) {
+		from.addClass("me")
+	}
+	from.append(fromStr + ":")
+	p.append(from)
+	p.append(" " + msg)
+	let list = $("#messageList").append(p)[0]
 	// Now scroll down automatically
-	if(list.scrollHeight - list.scrollTop - list.clientHeight <= 30)
-		list.scrollTop = list.scrollHeight;
+	if (list.scrollHeight - list.scrollTop - list.clientHeight <= 30) {
+		list.scrollTop = list.scrollHeight
+	}
 }
 
 function login() {
-	$("#loginButton").hide();
-	$("#username").attr("disabled", "disabled");
+	$("#loginButton").hide()
+	$("#username").attr("disabled", "disabled")
 	// Send request to login
-	socket.of("chat").request("login", $("#username").val() )
+	socket
+		.of("chat")
+		.request("login", $("#username").val())
 		.then(() => {
 			// Login succeeded
-			$("#logoutButton, #newMessage").show();
-			addMessage("system", "You have been logged in");
-			$("#message").val("").focus();
+			$("#logoutButton, #newMessage").show()
+			addMessage("system", "You have been logged in")
+			$("#message").val("").focus()
 		})
 		.catch((err) => {
 			// Login failed; just logout...
-			alert(err);
-			logout();
-		});
+			alert(err)
+			logout()
+		})
 }
 
 function logout() {
-	$("#logoutButton, #newMessage").hide();
-	$("#loginButton").show();
-	$("#username").removeAttr("disabled");
+	$("#logoutButton, #newMessage").hide()
+	$("#loginButton").show()
+	$("#username").removeAttr("disabled")
 	// Send request to logout
-	socket.of("chat").request("logout")
+	socket
+		.of("chat")
+		.request("logout")
 		.then(() => {
-			addMessage("system", "You have been logged out");
+			addMessage("system", "You have been logged out")
 		})
 		.catch((err) => {
-			console.error(err);
-		});
+			console.error(err)
+		})
 }
 
 $(() => {
-	$("#loginButton").on("click", login);
-	$("#logoutButton").on("click", logout);
+	$("#loginButton").on("click", login)
+	$("#logoutButton").on("click", logout)
 	$("#newMessage").on("submit", function sendMessage(e) {
-		socket.of("chat").emit("message", $("#message").val() );
-		$("#message").val("").focus();
-		e.preventDefault();
-	});
+		socket.of("chat").emit("message", $("#message").val())
+		$("#message").val("").focus()
+		e.preventDefault()
+	})
 
-	addMessage("system", "Welcome! Please pick a username and login.");
-});
+	addMessage("system", "Welcome! Please pick a username and login.")
+})

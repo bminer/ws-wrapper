@@ -233,6 +233,9 @@ instance.
 		Defaults to `null`, which means that there will be no timeout.
 		This option is recommended for servers because clients who do
 		not fulfill pending requests can cause memory leaks.
+	- `pendingQueue` - set to `false` to disable `_pendingSend`.
+		Defaults to `true`.
+		With this will no longer save to an array to send later when the socket connect
 
 Events
 

@@ -5,7 +5,7 @@
 	"main": "./lib/wrapper.js",
 	"browser": "./dist/index.js",
 	"dependencies": {
-		"eventemitter3": ">=2 <4"
+		"eventemitter3": ">=2 <5"
 	},
 	"devDependencies": {
 		"babel-cli": "^6.26.0",
@@ -13,7 +13,7 @@
 		"koa": ">=1.2 <2",
 		"koa-router": ">=5.4 <6",
 		"module-concat": ">=2 <3",
-		"ws": ">=3.3.1 <4"
+		"ws": ">=3.3.1 <8"
 	},
 	"scripts": {
 		"prepublish": "npm run concat && npm run babel",

@@ -304,6 +304,13 @@ The EventEmitter-like API looks like this:
 	**Note**: If a request is sent, but there is no remote event listener to respond
 	to the request, a response rejection is immediately sent back by the
 	remote end.
+- `socket.use(function fn(eventName, args, next) {...})`
+	Adds a middleware function `fn` to receive all messages for the channel. The
+	`eventName` indicates the name of the event or request, and the `args` are
+	the arguments to be passed to the respective event handler. `next([err])`
+	should be called to continue processing to the next middleware function.
+	Once all middleware have processed the event and called `next`, the event
+	is then processed by the event handler for the `eventName`.
 - `socket.timeout(tempTimeoutInMs)`
 	Temporarily sets the `requestTimeout` to `tempTimeoutInMs` for the next request
 	only.  This returns `socket` to allow chaining.  Typical usage:
@@ -429,3 +436,4 @@ how easy it is to add.
 
 If someone wants to make an npm package for the auto-reconnect feature, I'd be
 happy to list it here, but it will probably never be a core ws-wrapper feature.
+

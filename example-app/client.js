@@ -3,7 +3,7 @@
 const WebSocketWrapper = require("../lib/wrapper")
 
 // Create WebSocketWrapper
-window.socket = new WebSocketWrapper(new WebSocket("ws://" + location.host))
+const socket = new WebSocketWrapper(new WebSocket("ws://" + location.host))
 socket.on("disconnect", function (wasOpen) {
 	// Check `wasOpen` flag, so we don't try to logout on each disconnection
 	if (wasOpen) {
@@ -22,8 +22,8 @@ socket.of("chat").on("message", addMessage)
 
 function addMessage(fromStr, msg) {
 	// Add a message to the DOM
-	let p = $('<p class="message">')
-	let from = $('<span class="from">')
+	const p = $('<p class="message">')
+	const from = $('<span class="from">')
 	if (fromStr === "system") {
 		from.addClass("system")
 	} else if (fromStr === $("#username").val()) {
@@ -32,7 +32,7 @@ function addMessage(fromStr, msg) {
 	from.append(fromStr + ":")
 	p.append(from)
 	p.append(" " + msg)
-	let list = $("#messageList").append(p)[0]
+	const [list] = $("#messageList").append(p)
 	// Now scroll down automatically
 	if (list.scrollHeight - list.scrollTop - list.clientHeight <= 30) {
 		list.scrollTop = list.scrollHeight
@@ -54,6 +54,7 @@ function login() {
 		})
 		.catch((err) => {
 			// Login failed; just logout...
+			// eslint-disable-next-line no-alert
 			alert(err)
 			logout()
 		})

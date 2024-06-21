@@ -14,14 +14,14 @@ const http = require("http"),
 	router = require("koa-router")()
 
 // Create new HTTP server using koa and a new WebSocketServer
-let app = new Koa(),
+const app = new Koa(),
 	server = http.createServer(app.callback()),
-	socketServer = new WebSocketServer({ server: server })
+	socketServer = new WebSocketServer({ server })
 
 // Save all connected `sockets`
-let sockets = []
+const sockets = []
 // Save all logged in `users`; keys are usernames, values are the sockets
-let users = {}
+const users = {}
 // Listen for a socket to connect
 socketServer.on("connection", function (socket) {
 	// Upon connection, wrap the socket and save it in the `sockets` array
@@ -37,7 +37,7 @@ socketServer.on("connection", function (socket) {
 			throw new Error(`Username '${username}' is taken!`)
 		} else {
 			// Notify all other users
-			for (let i in users) {
+			for (const i in users) {
 				users[i]
 					.of("chat")
 					.emit("message", "system", username + " has logged in")
@@ -48,10 +48,10 @@ socketServer.on("connection", function (socket) {
 		}
 	})
 	socket.of("chat").on("message", (msg) => {
-		let username = socket.get("username")
+		const username = socket.get("username")
 		if (username) {
 			// We're logged in, so relay the message to all clients
-			for (let i in users) {
+			for (const i in users) {
 				users[i].of("chat").emit("message", username, msg)
 			}
 		} else {
@@ -59,11 +59,11 @@ socketServer.on("connection", function (socket) {
 		}
 	})
 	socket.of("chat").on("logout", () => {
-		let username = socket.get("username")
+		const username = socket.get("username")
 		if (users[username]) {
 			delete users[username]
 			// Notify all other users
-			for (let i in users) {
+			for (const i in users) {
 				users[i]
 					.of("chat")
 					.emit("message", "system", username + " has logged out")
@@ -72,15 +72,15 @@ socketServer.on("connection", function (socket) {
 	})
 	// Upon disconnect, free resources
 	socket.on("disconnect", () => {
-		let idx = sockets.indexOf(socket)
+		const idx = sockets.indexOf(socket)
 		if (idx >= 0) {
 			sockets.splice(idx, 1)
 		}
-		let username = socket.get("username")
+		const username = socket.get("username")
 		if (users[username]) {
 			delete users[username]
 			// Notify all other users
-			for (let i in users) {
+			for (const i in users) {
 				users[i]
 					.of("chat")
 					.emit("message", "system", username + " has logged out")
@@ -109,7 +109,7 @@ moduleConcat(
 		if (err) {
 			throw err
 		}
-		const files = stats.files
+		const { files } = stats
 		console.log(`${files.length} files combined into build:\n`, files)
 
 		// Start the server after building client_build.js

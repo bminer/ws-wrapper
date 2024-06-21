@@ -1,13 +1,15 @@
-<html>
+<!doctype html>
+<html lang="en">
 	<head>
 		<title>ws-wrapper test</title>
-		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/zepto/1.2.0/zepto.min.js"></script>
-		<script type="text/javascript" src="/client.js"></script>
-		<style type="text/css">
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/zepto/1.2.0/zepto.min.js"></script>
+		<script src="/client.js"></script>
+		<style>
 			body {
 				font-family: sans-serif;
 			}
-			button, input {
+			button,
+			input {
 				padding: 5px 10px;
 			}
 			#messageList {
@@ -41,17 +43,17 @@
 	</head>
 	<body>
 		<h1>ws-wrapper test</h1>
-		<section id="login">
-			<input type="text" id="username" placeholder="Enter your username"/>
+		<div id="login">
+			<input type="text" id="username" placeholder="Enter your username" />
 			<button id="loginButton">Log in</button>
 			<button id="logoutButton">Log out</button>
-		<section>
+		</div>
 		<section id="messages">
 			<h2>Messages</h2>
 			<div id="messageList"></div>
 		</section>
 		<form id="newMessage">
-			<input type="text" id="message" placeholder="Enter your message"/>
+			<input type="text" id="message" placeholder="Enter your message" />
 			<button type="submit" id="sendButton">Send</button>
 		</form>
 	</body>

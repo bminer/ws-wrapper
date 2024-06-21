@@ -10,11 +10,11 @@ const http = require("http"),
 	WebSocketServer = require("ws").Server,
 	WebSocketWrapper = require("../"),
 	moduleConcat = require("module-concat"),
-	koa = require("koa"),
+	Koa = require("koa"),
 	router = require("koa-router")()
 
 // Create new HTTP server using koa and a new WebSocketServer
-let app = koa(),
+let app = new Koa(),
 	server = http.createServer(app.callback()),
 	socketServer = new WebSocketServer({ server: server })
 
@@ -92,13 +92,13 @@ socketServer.on("connection", function (socket) {
 // Setup koa router
 app.use(router.routes())
 // Serve index.html and client.js
-router.get(["/"], function* () {
-	this.type = "text/html"
-	this.body = fs.createReadStream(__dirname + "/index.html")
+router.get("/", (ctx, next) => {
+	ctx.type = "text/html"
+	ctx.body = fs.createReadStream(__dirname + "/index.html")
 })
-router.get(["/client.js"], function* () {
-	this.type = "text/javascript"
-	this.body = fs.createReadStream(__dirname + "/client_build.js")
+router.get("/client.js", (ctx, next) => {
+	ctx.type = "text/javascript"
+	ctx.body = fs.createReadStream(__dirname + "/client_build.js")
 })
 
 // Build client.js using "node-module-concat"
@@ -113,7 +113,7 @@ moduleConcat(
 		console.log(`${files.length} files combined into build:\n`, files)
 
 		// Start the server after building client_build.js
-		const PORT = process.env.PORT || 3000
+		const { PORT = 3000 } = process.env
 		server.listen(PORT, () => {
 			console.log("Listening on port " + PORT)
 		})

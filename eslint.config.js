@@ -2,10 +2,24 @@ const js = require("@eslint/js")
 const globals = require("globals")
 const prettierPlugin = require("eslint-plugin-prettier/recommended")
 
+const nodeBuiltinSet = new Set(Object.keys(globals.nodeBuiltin))
+// Compute the intersection of browser and nodeBuiltin globals
+const primaryGlobals = {}
+for (const g in globals.browser) {
+	if (nodeBuiltinSet.has(g)) {
+		primaryGlobals[g] = globals.browser[g]
+	}
+}
+
 module.exports = [
 	js.configs.recommended,
 	prettierPlugin,
 	{
+		languageOptions: {
+			ecmaVersion: 2018,
+			sourceType: "commonjs",
+			globals: primaryGlobals,
+		},
 		rules: {
 			eqeqeq: ["error", "always", { null: "never" }],
 			"no-unused-expressions": "error",
@@ -34,22 +48,8 @@ module.exports = [
 		},
 	},
 	{
-		files: ["lib/**/*.js", "eslint.config.js"],
-		languageOptions: {
-			ecmaVersion: 2018,
-			sourceType: "commonjs",
-			globals: {
-				console: false,
-				setTimeout: false,
-				clearTimeout: false,
-			},
-		},
-	},
-	{
 		files: ["example-app/client.js"],
 		languageOptions: {
-			ecmaVersion: 2018,
-			sourceType: "commonjs",
 			globals: {
 				...globals.browser,
 				$: false,
@@ -59,8 +59,6 @@ module.exports = [
 	{
 		files: ["example-app/server.js"],
 		languageOptions: {
-			ecmaVersion: 2018,
-			sourceType: "commonjs",
 			globals: {
 				...globals.node,
 			},

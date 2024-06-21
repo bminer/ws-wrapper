@@ -32,7 +32,7 @@ function addMessage(fromStr, msg) {
 	from.append(fromStr + ":")
 	p.append(from)
 	p.append(" " + msg)
-	const list = $("#messageList").append(p).get()
+	const list = $("#messageList").append(p).get(0)
 	// Now scroll down automatically
 	if (list.scrollHeight - list.scrollTop - list.clientHeight <= 30) {
 		list.scrollTop = list.scrollHeight

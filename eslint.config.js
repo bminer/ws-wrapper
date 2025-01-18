@@ -1,6 +1,6 @@
-const js = require("@eslint/js")
-const globals = require("globals")
-const prettierPlugin = require("eslint-plugin-prettier/recommended")
+import js from "@eslint/js"
+import globals from "globals"
+import prettierPlugin from "eslint-plugin-prettier/recommended"
 
 const nodeBuiltinSet = new Set(Object.keys(globals.nodeBuiltin))
 // Compute the intersection of browser and nodeBuiltin globals
@@ -11,13 +11,13 @@ for (const g in globals.browser) {
 	}
 }
 
-module.exports = [
+export default [
 	js.configs.recommended,
 	prettierPlugin,
 	{
 		languageOptions: {
 			ecmaVersion: 2018,
-			sourceType: "commonjs",
+			sourceType: "module",
 			globals: primaryGlobals,
 		},
 		rules: {

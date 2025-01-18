@@ -5,13 +5,11 @@
 	This example does *NOT* use ws-server-wrapper.  For an example using
 	ws-server-wrapper, visit the ws-server-wrapper Github repo.
 */
-const http = require("http"),
-	fs = require("fs"),
-	WebSocketServer = require("ws").Server,
-	WebSocketWrapper = require("../"),
-	moduleConcat = require("module-concat"),
-	Koa = require("koa"),
-	router = require("koa-router")()
+import http from "node:http"
+import { WebSocketServer } from "ws"
+import WebSocketWrapper from "../lib/wrapper.mjs"
+import Koa from "koa"
+import serve from "koa-static"
 
 // Create new HTTP server using koa and a new WebSocketServer
 const app = new Koa(),
@@ -89,33 +87,11 @@ socketServer.on("connection", function (socket) {
 	})
 })
 
-// Setup koa router
-app.use(router.routes())
-// Serve index.html and client.js
-router.get("/", (ctx, next) => {
-	ctx.type = "text/html"
-	ctx.body = fs.createReadStream(__dirname + "/index.html")
-})
-router.get("/client.js", (ctx, next) => {
-	ctx.type = "text/javascript"
-	ctx.body = fs.createReadStream(__dirname + "/client_build.js")
-})
+// Setup static file server
+app.use(serve("dist"))
 
-// Build client.js using "node-module-concat"
-moduleConcat(
-	__dirname + "/client.js",
-	__dirname + "/client_build.js",
-	function (err, stats) {
-		if (err) {
-			throw err
-		}
-		const { files } = stats
-		console.log(`${files.length} files combined into build:\n`, files)
-
-		// Start the server after building client_build.js
-		const { PORT = 3000 } = process.env
-		server.listen(PORT, () => {
-			console.log("Listening on port " + PORT)
-		})
-	}
-)
+// Start the server after building client_build.js
+const { PORT = 3000 } = process.env
+server.listen(PORT, () => {
+	console.log("Listening on port " + PORT)
+})

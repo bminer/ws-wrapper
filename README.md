@@ -89,8 +89,7 @@ wss.on("connection", (socket) => {
 Use [ws-server-wrapper-go](https://github.com/bminer/ws-server-wrapper-go) to
 wrap your favorite WebSocket library. See
 [here for a complete example](https://pkg.go.dev/github.com/bminer/ws-server-wrapper-go@v0.0.0-20250119025659-ed3a0d67b7c5/adapters/coder#example-package)
-using the [coder/websocket](https://pkg.go.dev/github.com/codercom/websocket)
-library.
+using the [coder/websocket](https://github.com/coder/websocket) library.
 
 #### Other servers
 

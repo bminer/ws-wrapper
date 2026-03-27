@@ -5,11 +5,11 @@
 	This example does *NOT* use ws-server-wrapper.  For an example using
 	ws-server-wrapper, visit the ws-server-wrapper Github repo.
 */
+import Koa from "koa"
+import serve from "koa-static"
 import http from "node:http"
 import { WebSocketServer } from "ws"
 import WebSocketWrapper from "../lib/wrapper.mjs"
-import Koa from "koa"
-import serve from "koa-static"
 
 // Create new HTTP server using koa and a new WebSocketServer
 const app = new Koa(),
@@ -68,6 +68,45 @@ socketServer.on("connection", function (socket) {
 			}
 		}
 	})
+
+	// Handle slow operation that can be cancelled
+	socket.on("slowOperation", async function (data) {
+		const { signal } = this
+		console.log(
+			`Starting slow operation for ${socket.get("username")}: ${data}`
+		)
+
+		// Check if already cancelled
+		if (signal && signal.aborted) {
+			throw new Error("Operation was cancelled")
+		}
+
+		// Simulate long-running operation with periodic cancellation checks
+		for (let i = 0; i < 10; i++) {
+			// Check for cancellation
+			if (signal && signal.aborted) {
+				console.log(`Slow operation cancelled at step ${i + 1}/10`)
+				throw new Error("Operation was cancelled")
+			}
+
+			// Simulate work (1 second each step = 10 seconds total)
+			await new Promise((resolve) => {
+				const timeout = setTimeout(resolve, 1000)
+
+				// If cancelled during sleep, clean up timeout
+				if (signal) {
+					signal.addEventListener("abort", () => {
+						clearTimeout(timeout)
+						resolve()
+					})
+				}
+			})
+		}
+
+		console.log(`Slow operation completed for ${socket.get("username")}`)
+		return `Slow operation completed with data: ${data}`
+	})
+
 	// Upon disconnect, free resources
 	socket.on("disconnect", () => {
 		const idx = sockets.indexOf(socket)

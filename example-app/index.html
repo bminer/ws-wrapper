@@ -37,7 +37,8 @@
 				padding: 30px 0px;
 				display: none;
 			}
-			#logoutButton {
+			#logoutButton,
+			#cancelSlowButton {
 				display: none;
 			}
 		</style>
@@ -48,6 +49,12 @@
 			<input type="text" id="username" placeholder="Enter your username" />
 			<button id="loginButton">Log in</button>
 			<button id="logoutButton">Log out</button>
+		</div>
+		<div id="demo">
+			<h3>AbortSignal Demo</h3>
+			<button id="slowRequestButton">Start Slow Request (10s)</button>
+			<button id="cancelSlowButton">Cancel Slow Request</button>
+			<button id="timeoutTestButton">Test Timeout (2s)</button>
 		</div>
 		<section id="messages">
 			<h2>Messages</h2>

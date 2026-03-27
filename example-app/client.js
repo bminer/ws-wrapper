@@ -18,6 +18,9 @@ socket.on("error", () => {
 })
 socket.of("chat").on("message", addMessage)
 
+// AbortController for slow request demo
+let slowRequestAbortController = null
+
 function addMessage(fromStr, msg) {
 	// Add a message to the DOM
 	const p = $('<p class="message">')
@@ -74,9 +77,61 @@ function logout() {
 		})
 }
 
+function startSlowRequest() {
+	$("#slowRequestButton").hide()
+	$("#cancelSlowButton").show()
+	addMessage("system", "Starting slow request (10 seconds)...")
+
+	slowRequestAbortController = new AbortController()
+
+	socket
+		.signal(slowRequestAbortController.signal)
+		.request("slowOperation", "demo-data")
+		.then((result) => {
+			addMessage("system", `Slow request completed: ${result}`)
+			$("#slowRequestButton").show()
+			$("#cancelSlowButton").hide()
+			slowRequestAbortController = null
+		})
+		.catch((err) => {
+			if (err.name === "RequestAbortedError") {
+				addMessage("system", "Slow request was cancelled")
+			} else {
+				addMessage("system", `Slow request failed: ${err.message}`)
+			}
+			$("#slowRequestButton").show()
+			$("#cancelSlowButton").hide()
+			slowRequestAbortController = null
+		})
+}
+
+function cancelSlowRequest() {
+	if (slowRequestAbortController) {
+		addMessage("system", "Cancelling slow request...")
+		slowRequestAbortController.abort()
+	}
+}
+
+function testTimeout() {
+	addMessage("system", "Testing 2-second timeout on 5-second operation...")
+
+	socket
+		.timeout(2000) // 2 second timeout
+		.request("slowOperation", "timeout-test")
+		.then((result) => {
+			addMessage("system", `Timeout test completed: ${result}`)
+		})
+		.catch((err) => {
+			addMessage("system", `Timeout test failed as expected: ${err.message}`)
+		})
+}
+
 $(() => {
 	$("#loginButton").on("click", login)
 	$("#logoutButton").on("click", logout)
+	$("#slowRequestButton").on("click", startSlowRequest)
+	$("#cancelSlowButton").on("click", cancelSlowRequest)
+	$("#timeoutTestButton").on("click", testTimeout)
 	$("#newMessage").on("submit", function sendMessage(e) {
 		socket.of("chat").emit("message", $("#message").val())
 		$("#message").val("").focus()

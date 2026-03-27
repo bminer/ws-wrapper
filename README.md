@@ -237,6 +237,8 @@ instance.
     until rejecting the Promise of a pending request. Defaults to `null`, which
     means that there will be no timeout. This option is recommended for servers
     because clients who do not fulfill pending requests can cause memory leaks.
+    As of version 4, we send cancellation messages to the remote end for
+    requests that time out.
 
 Events
 
@@ -319,9 +321,32 @@ The EventEmitter-like API looks like this:
 - `socket.timeout(tempTimeoutInMs)` Temporarily sets the `requestTimeout` to
   `tempTimeoutInMs` for the next request only. This returns `socket` to allow
   chaining. Typical usage:
+
   ```javascript
   // The next request will be rejected if there is no response for 5 secs.
   let promise = socket.timeout(5 * 1000).request("readFile", "/etc/issue")
+  ```
+
+- `socket.signal(abortSignal)` Temporarily sets the `AbortSignal` for the next
+  request only. This allows cancellation of in-flight requests. This returns
+  `socket` to allow chaining. Can be combined with `timeout()`. Typical usage:
+
+  ```javascript
+  const controller = new AbortController()
+
+  // The next request can be cancelled using the AbortController
+  let promise = socket.signal(controller.signal).request("longOperation", data)
+
+  // Later, we can cancel the request. In this case, our Promise will be
+  // immediately rejected with RequestAbortedError, and the remote end will
+  // receive a cancellation message.
+  controller.abort()
+
+  // Combined with timeout
+  let promise2 = socket
+    .timeout(10000)
+    .signal(controller.signal)
+    .request("heavyTask", data)
   ```
 
 The above EventEmitter functions like `on` and `once` are chainable (as
@@ -362,6 +387,78 @@ following methods allow one to re-bind a new WebSocket or clear the send queue.
 the send queue. If a user tries to send more messages than this number while a
 WebSocket is not connected, errors will be thrown. Defaults to 10; changes
 affect all WebSocketWrapper instances.
+
+## Error Classes
+
+ws-wrapper exports custom error classes that extend the standard `Error` class
+to provide more specific error handling for different failure scenarios.
+
+### RequestTimeoutError
+
+```javascript
+import WebSocketWrapper, { RequestTimeoutError } from "ws-wrapper"
+
+socket
+  .timeout(5000)
+  .request("slowOperation")
+  .catch((err) => {
+    if (err instanceof RequestTimeoutError) {
+      console.log("Request timed out after 5 seconds")
+    }
+  })
+```
+
+**Properties:**
+
+- `name` "RequestTimeoutError"
+- `message` "Request timed out"
+
+This error is thrown when a request exceeds the configured timeout period. The
+timeout can be set globally via the `requestTimeout` constructor option or
+per-request using the `.timeout()` method.
+
+### RequestAbortedError
+
+```javascript
+import WebSocketWrapper, { RequestAbortedError } from "ws-wrapper"
+
+const controller = new AbortController()
+socket
+  .signal(controller.signal)
+  .request("longOperation")
+  .catch((err) => {
+    if (err instanceof RequestAbortedError) {
+      console.log("Request was cancelled:", err.reason)
+    }
+  })
+
+// Cancel the request
+controller.abort("User cancelled")
+```
+
+**Properties:**
+
+- `name` "RequestAbortedError"
+- `message` "Request aborted"
+- `reason` The reason passed to `AbortController.abort()` (if any)
+
+This error is thrown when a request is cancelled via an `AbortSignal`. The
+optional `reason` property contains any cancellation reason that was provided
+when calling `abort()`.
+
+### Accessing Error Classes
+
+Error classes are available in multiple ways:
+
+```javascript
+// Named imports
+import { RequestTimeoutError, RequestAbortedError } from "ws-wrapper"
+
+// Via the main class
+import WebSocketWrapper from "ws-wrapper"
+const TimeoutError = WebSocketWrapper.RequestTimeoutError
+const AbortedError = WebSocketWrapper.RequestAbortedError
+```
 
 ## Protocol
 
@@ -422,12 +519,111 @@ The following message types are defined by ws-wrapper:
    }
    ```
 
+1. **Request Cancellation** - Identified by an Object with `i` and `x` keys
+   where `i` is the request identifier to cancel. Introduced in ws-wrapper v4.
+
+   ```javascript
+   {
+    "i": 123,
+    "x": 1
+   }
+   ```
+
+   When a request is cancelled using an `AbortSignal`, a cancellation message is
+   sent to the remote end to notify it that the request should be aborted. The
+   remote end can use this information to stop processing the request and clean
+   up any resources. Event handlers on the remote end can access the
+   `AbortSignal` via `this.signal` to implement cooperative cancellation.
+
 If the message received by the WebSocket is not valid JSON or if the parsed
 Object does not match one of the above message types, then the message is simply
 ignored by ws-wrapper. Also if the JSON message contains a `ws-wrapper` property
 with the value `false`, the message will be ignored. This allows other libraries
 to use the same WebSocket and send messages that will not be processed by
 ws-wrapper.
+
+## Request Cancellation with AbortSignal
+
+Starting in version 4, ws-wrapper supports request cancellation using the Web
+standard `AbortSignal` API. This allows you to cancel in-flight requests from
+either the client or server side.
+
+```javascript
+const controller = new AbortController()
+
+// Send a request that can be cancelled
+const promise = socket.signal(controller.signal).request("longOperation", data)
+
+// Cancel the request at any time
+controller.abort()
+
+// The promise will be rejected with "Request aborted"
+promise.catch((err) => {
+  if (err instanceof RequestAbortedError) {
+    console.log("Request was cancelled by user")
+  }
+})
+```
+
+Event handlers can access the `AbortSignal` via `this.signal` to implement
+cooperative cancellation:
+
+```javascript
+socket.on("longOperation", async function (data) {
+  // Check if already cancelled
+  if (this.signal?.aborted) {
+    throw new Error("Operation was cancelled")
+  }
+
+  // Listen for cancellation during processing
+  const onAbort = () => {
+    // Perhaps do something here on abort...
+  }
+  this.signal?.addEventListener("abort", onAbort)
+
+  try {
+    // Do long running work, checking signal periodically
+    for (let i = 0; i < 10; i++) {
+      if (this.signal?.aborted) {
+        throw new Error("Operation was cancelled")
+      }
+      await doSomeWork()
+    }
+    return "Operation completed"
+  } finally {
+    this.signal?.removeEventListener("abort", onAbort)
+  }
+})
+```
+
+### Combining with Timeout
+
+You can use both timeout and cancellation together:
+
+```javascript
+import WebSocketWrapper, {
+  RequestTimeoutError,
+  RequestAbortedError,
+} from "ws-wrapper"
+
+const controller = new AbortController()
+
+const promise = socket
+  .timeout(30000) // 30 second timeout
+  .signal(controller.signal) // User cancellation
+  .request("heavyComputation", data)
+
+// Handle different error types
+promise.catch((err) => {
+  if (err instanceof RequestTimeoutError) {
+    console.log("Request timed out after 30 seconds")
+  } else if (err instanceof RequestAbortedError) {
+    console.log("Request was cancelled by user")
+  } else {
+    console.log("Request failed with other error:", err)
+  }
+})
+```
 
 ## Auto-Reconnect
 

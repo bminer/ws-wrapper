@@ -1,7 +1,8 @@
 # ws-wrapper
 
 Lightweight and isomorphic [Web Socket](https://en.wikipedia.org/wiki/WebSocket)
-lib with socket.io-like event handling, Promise-based requests, and channels.
+lib with socket.io-like event handling, Promise-based requests, channels, and
+cancellation signals.
 
 ## What?
 
@@ -23,7 +24,7 @@ library. You can get even fancier on the server side and utilize the
 Because lightweight is sometimes what you want. This library and its
 dependencies weigh under 3 KB when minified and gzipped!
 
-This lib might be useful if you want some [socket.io](http://socket.io/docs/)
+This lib might be useful if you want some [socket.io](https://socket.io/docs/)
 functionality (i.e. namespaces, event handling, etc.), but you don't want all of
 the [engine.io](https://github.com/socketio/engine.io) transports. When using
 this library in conjunction with a library like
@@ -38,17 +39,15 @@ npm install ws-wrapper
 
 ## Usage
 
-WebSocketWrapper is a CommonJS module, so it works in Node.js and in the browser
-if you use a bundler like Browserify, Webpack, Parcel.js, or
-[module-concat](https://github.com/bminer/module-concat).
+WebSocketWrapper is an ES module, so it works in Node.js and in the browser if
+you use a bundler like Browserify, Webpack, or Parcel.js.
 
 Check out the
 [example-app](https://github.com/bminer/ws-wrapper/tree/master/example-app) for
 a sample chat application (**recommended**).
 
-Note: This module uses ES6 classes. If you need this to work in IE or another
-old, decrepit browser, try using a code transpiler like
-[Babel](https://babeljs.io/).
+Note: This module uses ES6 classes and ES modules. If you need this to work in
+older browsers, try using a code transpiler like [Babel](https://babeljs.io/).
 
 Note: This module uses `JSON.stringify` to serialize data over the raw WebSocket
 connection. This means that serializing circular references is not supported out

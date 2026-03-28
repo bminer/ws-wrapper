@@ -506,33 +506,42 @@ The following message types are defined by ws-wrapper:
    ```
 
 1. **Response (Rejection)** - Identified by an Object with `i` and `e` keys
-   where `i` is the request identifier and `e` is the error Object to be used
-   when rejecting the response Promise. If `_` is set, the `e` Object is
-   converted into an Error instance upon receipt.
+   where `i` is the request identifier and `e` is the rejected value. If `_` is
+   set, `e` is a serialized Error object (with at least a `message` key) that is
+   reconstructed as an `Error` instance upon receipt. `null` and `undefined`
+   rejection values are replaced with a default `Error` object. All other values
+   for `e` (strings, numbers, plain objects, etc.) are passed through as-is.
 
    ```javascript
-   {
-    "i": 123,
-    "e": {"message": "error message"},
-    "_": 1
-   }
+   // Error instance (e.g. throw new Error("oops"))
+   { "i": 123, "e": {"message": "oops"}, "_": 1 }
+
+   // Any other thrown value (e.g. throw "oops" or throw {code: 42})
+   { "i": 123, "e": "oops" }
    ```
 
 1. **Request Cancellation** - Identified by an Object with `i` and `x` keys
-   where `i` is the request identifier to cancel. Introduced in ws-wrapper v4.
+   where `i` is the request identifier to cancel and `x` is the cancellation
+   reason. The same rules as `e` apply: if `_` is set, `x` is a serialized Error
+   object, and if the reason is nullish, a default Error is sent. Introduced in
+   ws-wrapper v4.
 
    ```javascript
-   {
-    "i": 123,
-    "x": 1
-   }
+   // Default (no reason provided)
+   { "i": 123, "x": {"message": "Request aborted"}, "_": 1 }
+
+   // String reason
+   { "i": 123, "x": "user cancelled" }
    ```
 
    When a request is cancelled using an `AbortSignal`, a cancellation message is
-   sent to the remote end to notify it that the request should be aborted. The
-   remote end can use this information to stop processing the request and clean
-   up any resources. Event handlers on the remote end can access the
-   `AbortSignal` via `this.signal` to implement cooperative cancellation.
+   sent to the remote end. The `AbortSignal.reason` is forwarded as `x` (with
+   `_: 1` when it is an Error instance). `null` and `undefined` reasons are
+   replaced with a default `RequestAbortedError` (same rule as for `e`). All
+   other reason values are sent exactly as-is. The remote end can use this
+   information to stop processing the request and clean up any resources. Event
+   handlers on the remote end can access the `AbortSignal` via `this.signal` to
+   implement cooperative cancellation.
 
 If the message received by the WebSocket is not valid JSON or if the parsed
 Object does not match one of the above message types, then the message is simply

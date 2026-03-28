@@ -124,7 +124,27 @@ test("request rejects when remote sends a plain string error", async () => {
 	const p = wrapper.request("fail")
 	const { i: reqId } = lastSent(socket)
 	wrapper._onMessage(JSON.stringify({ i: reqId, e: "something went wrong" }))
-	await assert.rejects(p, (err) => err instanceof Error)
+	// Plain strings are passed through as-is (not wrapped in Error)
+	await assert.rejects(p, (err) => err === "something went wrong")
+})
+
+test("request rejects when remote sends an empty string error", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("fail")
+	const { i: reqId } = lastSent(socket)
+	wrapper._onMessage(JSON.stringify({ i: reqId, e: "" }))
+	// Empty string is passed through as-is (not wrapped in Error)
+	await assert.rejects(p, (err) => err === "")
+})
+
+test("request rejects with raw value when e is a plain object (no _ flag)", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("fail")
+	const { i: reqId } = lastSent(socket)
+	wrapper._onMessage(JSON.stringify({ i: reqId, e: { code: 42 } }))
+	await assert.rejects(p, (err) => err.code === 42 && !(err instanceof Error))
 })
 
 // ---------------------------------------------------------------------------
@@ -155,10 +175,14 @@ test("timeout sends a cancellation message to the remote", async () => {
 	const p = wrapper.request("slow")
 	const reqId = JSON.parse(socket.sent[0]).i
 	await assert.rejects(p, (err) => err.name === "RequestTimeoutError")
-	// A cancellation frame {i, x:1} should have been sent
-	const cancel = socket.sent.map(JSON.parse).find((m) => m.x)
+	// A cancellation frame should have been sent
+	const cancel = socket.sent.map(JSON.parse).find((m) => "x" in m)
 	assert.ok(cancel, "cancellation message should be sent")
 	assert.equal(cancel.i, reqId)
+	// x should be a serialized RequestAbortedError with _ flag
+	assert.equal(cancel._, 1, "x should be flagged as a JS Error")
+	assert.equal(typeof cancel.x, "object", "x should be an Error object")
+	assert.equal(cancel.x.message, "Request aborted")
 })
 
 // ---------------------------------------------------------------------------
@@ -190,12 +214,142 @@ test("inbound cancellation aborts the active request handler", () => {
 	wrapper._onMessage(JSON.stringify({ a: ["doWork"], i: 7 }))
 	if (typeof AbortController === "function") {
 		assert.ok(wrapper._activeRequests[7], "should track active request")
-		wrapper._onMessage(JSON.stringify({ x: 1, i: 7 }))
+		wrapper._onMessage(
+			JSON.stringify({ x: { message: "Request aborted" }, _: 1, i: 7 })
+		)
 		assert.equal(
 			wrapper._activeRequests[7],
 			undefined,
 			"active request should be cleaned up after cancellation"
 		)
+	}
+})
+
+test("signal abort with string reason sends that string in x", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ac = new AbortController()
+	const p = wrapper.signal(ac.signal).request("slow")
+	const reqId = JSON.parse(socket.sent[0]).i
+	ac.abort("user cancelled")
+	await assert.rejects(p, (err) => err.name === "RequestAbortedError")
+	const cancel = socket.sent.map(JSON.parse).find((m) => "x" in m)
+	assert.ok(cancel, "cancellation message should be sent")
+	assert.equal(cancel.i, reqId)
+	assert.equal(cancel.x, "user cancelled")
+	assert.equal(
+		cancel._,
+		undefined,
+		"_ flag should not be set for a string reason"
+	)
+})
+
+test("signal abort with Error reason sends serialized Error in x with _ flag", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ac = new AbortController()
+	const p = wrapper.signal(ac.signal).request("slow")
+	const reqId = JSON.parse(socket.sent[0]).i
+	ac.abort(new Error("user error"))
+	await assert.rejects(p, (err) => err.name === "RequestAbortedError")
+	const cancel = socket.sent.map(JSON.parse).find((m) => "x" in m)
+	assert.ok(cancel, "cancellation message should be sent")
+	assert.equal(cancel.i, reqId)
+	assert.equal(cancel._, 1, "_ should be set for Error reason")
+	assert.equal(typeof cancel.x, "object")
+	assert.equal(cancel.x.message, "user error")
+})
+
+test("signal abort with no explicit reason sends a cancel message with an Error", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ac = new AbortController()
+	const p = wrapper.signal(ac.signal).request("slow")
+	const reqId = JSON.parse(socket.sent[0]).i
+	ac.abort() // no reason — runtime supplies a default (e.g. DOMException in Node.js)
+	await assert.rejects(p, (err) => err.name === "RequestAbortedError")
+	const cancel = socket.sent.map(JSON.parse).find((m) => "x" in m)
+	assert.ok(cancel, "cancellation message should be sent")
+	assert.equal(cancel.i, reqId)
+	assert.equal(
+		cancel._,
+		1,
+		"_ should be set because reason is an Error-like object"
+	)
+	assert.equal(typeof cancel.x, "object")
+})
+
+test("signal abort with plain object reason sends object in x without _ flag", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ac = new AbortController()
+	const p = wrapper.signal(ac.signal).request("slow")
+	const reqId = JSON.parse(socket.sent[0]).i
+	ac.abort({ code: 42 })
+	await assert.rejects(p, (err) => err.name === "RequestAbortedError")
+	const cancel = socket.sent.map(JSON.parse).find((m) => "x" in m)
+	assert.ok(cancel, "cancellation message should be sent")
+	assert.equal(cancel.i, reqId)
+	assert.equal(
+		cancel._,
+		undefined,
+		"_ should not be set for plain object reason"
+	)
+	assert.deepEqual(cancel.x, { code: 42 })
+})
+
+test("inbound cancel with plain object reason passes it as-is to signal.reason", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	let capturedSignal = null
+	wrapper.on("doWork", function () {
+		capturedSignal = this.signal
+		return new Promise(() => {})
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["doWork"], i: 10 }))
+	if (typeof AbortController === "function") {
+		wrapper._onMessage(JSON.stringify({ x: { code: 42 }, i: 10 }))
+		assert.equal(capturedSignal.aborted, true)
+		assert.deepEqual(capturedSignal.reason, { code: 42 })
+	}
+})
+
+test("inbound cancel with string reason propagates to signal.reason", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	let capturedSignal = null
+	wrapper.on("doWork", function () {
+		capturedSignal = this.signal
+		return new Promise(() => {})
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["doWork"], i: 8 }))
+	if (typeof AbortController === "function") {
+		wrapper._onMessage(JSON.stringify({ x: "user cancelled", i: 8 }))
+		assert.equal(capturedSignal.aborted, true)
+		assert.equal(capturedSignal.reason, "user cancelled")
+	}
+})
+
+test("inbound cancel with Error reason reconstructs an Error on signal.reason", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	let capturedSignal = null
+	wrapper.on("doWork", function () {
+		capturedSignal = this.signal
+		return new Promise(() => {})
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["doWork"], i: 9 }))
+	if (typeof AbortController === "function") {
+		wrapper._onMessage(
+			JSON.stringify({
+				x: { message: "user error", name: "Error" },
+				_: 1,
+				i: 9,
+			})
+		)
+		assert.equal(capturedSignal.aborted, true)
+		assert.ok(capturedSignal.reason instanceof Error)
+		assert.equal(capturedSignal.reason.message, "user error")
 	}
 })
 
@@ -445,6 +599,71 @@ test("handler returning a rejected Promise sends an error response", async () =>
 	assert.equal(reply.i, 13)
 	assert.ok(reply.e)
 	assert.equal(reply.e.message, "async failure")
+})
+
+test("handler that throws null sends a default Error (null is not round-trip safe)", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	wrapper.on("nullThrow", () => {
+		throw null
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["nullThrow"], i: 14 }))
+	const reply = lastSent(socket)
+	assert.equal(reply.i, 14)
+	assert.equal(reply._, 1, "null should be replaced with a default Error")
+	assert.ok(typeof reply.e === "object" && reply.e != null)
+})
+
+test("handler that throws undefined sends a default Error (undefined is not serializable)", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	wrapper.on("undefThrow", () => {
+		throw undefined
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["undefThrow"], i: 15 }))
+	const reply = lastSent(socket)
+	assert.equal(reply.i, 15)
+	assert.equal(reply._, 1, "undefined should be replaced with a default Error")
+	assert.ok(typeof reply.e === "object" && reply.e != null)
+})
+
+test("handler that throws 0 sends 0 as-is", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	wrapper.on("zeroThrow", () => {
+		throw 0
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["zeroThrow"], i: 16 }))
+	const reply = lastSent(socket)
+	assert.equal(reply.i, 16)
+	assert.equal(reply._, undefined, "should not be flagged as an Error")
+	assert.equal(reply.e, 0)
+})
+
+test("handler that throws an empty string sends it as-is", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	wrapper.on("emptyStringThrow", () => {
+		throw ""
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["emptyStringThrow"], i: 17 }))
+	const reply = lastSent(socket)
+	assert.equal(reply.i, 17)
+	assert.equal(reply._, undefined, "should not be flagged as an Error")
+	assert.equal(reply.e, "")
+})
+
+test("handler that throws a plain object sends it as-is without _ flag", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	wrapper.on("objThrow", () => {
+		throw { code: 42, msg: "bad" }
+	})
+	wrapper._onMessage(JSON.stringify({ a: ["objThrow"], i: 18 }))
+	const reply = lastSent(socket)
+	assert.equal(reply.i, 18)
+	assert.equal(reply._, undefined, "should not be flagged as an Error")
+	assert.deepEqual(reply.e, { code: 42, msg: "bad" })
 })
 
 // ---------------------------------------------------------------------------

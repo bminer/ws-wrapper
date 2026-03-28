@@ -8,6 +8,7 @@
 			"default": "./lib/wrapper.mjs"
 		}
 	},
+	"browserslist": "defaults",
 	"type": "module",
 	"engines": {
 		"node": ">=14.0.0"

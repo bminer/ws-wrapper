@@ -22,7 +22,7 @@ library. You can get even fancier on the server side and utilize the
 ## Why?
 
 Because lightweight is sometimes what you want. This library and its
-dependencies weigh under 3 KB when minified and gzipped!
+dependencies weigh under 12 KB minified (under 4 KB minified and gzipped)!
 
 This lib might be useful if you want some [socket.io](https://socket.io/docs/)
 functionality (i.e. namespaces, event handling, etc.), but you don't want all of

@@ -1,40 +1,58 @@
 # ws-wrapper
 
-Lightweight and isomorphic [Web Socket](https://en.wikipedia.org/wiki/WebSocket)
-lib with socket.io-like event handling, Promise-based requests, channels, and
-cancellation signals.
+A lightweight, isomorphic library that brings named events, Promise-based
+requests, channels, and cancellation signals to native
+[WebSockets](https://en.wikipedia.org/wiki/WebSocket) — with first-class support
+for **browsers**, **Node.js**, and **Go** servers.
 
 ## What?
 
-Much like Socket.io, this library provides a protocol and API that sits on top
-of native WebSockets. Rather than passing raw messages through the WebSocket via
-[`WebSocket.send()`](<https://developer.mozilla.org/en-US/docs/Web/API/WebSocket#send()>),
-this library provides an RPC-like API that allows you to pass JSON data over
-WebSockets and trigger event handlers on the remote end. There is also a
-Promise-based request/response API, as well.
+Raw WebSockets give you one primitive: `send()`. ws-wrapper builds a practical
+communication layer on top of that, so instead of parsing and routing raw
+messages yourself, you get:
 
-This library is isomorphic, so it can wrap WebSockets on the client (i.e.
-browser) or on a Node.js server using the [ws](https://github.com/websockets/ws)
-library. You can get even fancier on the server side and utilize the
-[ws-server-wrapper](https://github.com/bminer/ws-server-wrapper) library
-(**recommended**).
+- **Named events** – emit an event on one end, handle it on the other, just like
+  [Socket.io](https://socket.io/docs/)
+- **Request / response** – send a request and get back a Promise that resolves
+  (or rejects) with the remote handler's return value
+- **Channels** – logically namespace events over a single WebSocket connection
+- **Cancellation** – cancel in-flight requests using the standard `AbortSignal`
+  API, with cooperative cancellation support on the remote end
+- **Bi-directionality** – clients can request data from the server, and the
+  server can also request data from clients
+
+The wire protocol is a thin JSON layer over the native WebSocket, keeping
+everything interoperable across JavaScript (browser or Node.js) and Go.
 
 ## Why?
 
-Because lightweight is sometimes what you want. This library and its
-dependencies weigh under 12 KB minified (under 4 KB minified and gzipped)!
-
-This lib might be useful if you want some [socket.io](https://socket.io/docs/)
-functionality (i.e. namespaces, event handling, etc.), but you don't want all of
-the [engine.io](https://github.com/socketio/engine.io) transports. When using
-this library in conjunction with a library like
-[ws](https://github.com/websockets/ws), your real-time web application can be
-pretty darn lightweight without giving up some nice bare-bones functionality.
+[Socket.io](https://socket.io/docs/) is great, but it ships with the full
+[engine.io](https://github.com/socketio/engine.io) transport stack. If you're
+already using a plain WebSocket, ws-wrapper gives you the event handling and
+request/response patterns you actually want – without the overhead. The entire
+library and its dependencies weigh **under 12 KB minified** (**under 4 KB**
+minified and gzipped).
 
 ## Install
 
+**Node.js / Browser**
+
 ```
 npm install ws-wrapper
+```
+
+or use the recommended
+[ws-server-wrapper](https://github.com/bminer/ws-server-wrapper) library:
+
+```
+npm install ws-server-wrapper
+```
+
+**Go server** (use with
+[ws-server-wrapper-go](https://github.com/bminer/ws-server-wrapper-go))
+
+```
+go get github.com/bminer/ws-server-wrapper-go
 ```
 
 ## Usage
@@ -44,14 +62,11 @@ you use a bundler like Browserify, Webpack, or Parcel.js.
 
 Check out the
 [example-app](https://github.com/bminer/ws-wrapper/tree/master/example-app) for
-a sample chat application (**recommended**).
+a sample chat application (recommended).
 
-Note: This module uses ES6 classes and ES modules. If you need this to work in
-older browsers, try using a code transpiler like [Babel](https://babeljs.io/).
-
-Note: This module uses `JSON.stringify` to serialize data over the raw WebSocket
-connection. This means that serializing circular references is not supported out
-of the box.
+Note: This library is designed to work with all modern browsers, but if you need
+support for older browsers, try using a code transpiler like
+[Babel](https://babeljs.io/).
 
 #### Client-side
 
@@ -59,15 +74,16 @@ of the box.
 // Use a bundler to make the next line of code "work" on the browser
 import WebSocketWrapper from "ws-wrapper"
 // Create a new socket
-var socket = new WebSocketWrapper(new WebSocket("ws://" + location.hostname))
+const socket = new WebSocketWrapper(new WebSocket("ws://" + location.hostname))
 // Now use the WebSocketWrapper API... `socket.emit` for example
-// See examples below...
+socket.emit("msg", "my_name", "This is a test message")
+// See additional examples below...
 ```
 
 #### Server-side (Node.js)
 
 Use [ws-server-wrapper](https://github.com/bminer/ws-server-wrapper) to wrap the
-WebSocketServer (**recommended**). See ws-server-wrapper README for more
+WebSocketServer (**recommended**). See the ws-server-wrapper README for more
 details.
 
 If you don't want to use ws-server-wrapper, you can wrap the WebSocket once a
@@ -86,9 +102,39 @@ wss.on("connection", (socket) => {
 #### Server-side (Go)
 
 Use [ws-server-wrapper-go](https://github.com/bminer/ws-server-wrapper-go) to
-wrap your favorite WebSocket library. See
-[here for a complete example](https://pkg.go.dev/github.com/bminer/ws-server-wrapper-go@v0.0.0-20250119025659-ed3a0d67b7c5/adapters/coder#example-package)
-using the [coder/websocket](https://github.com/coder/websocket) library.
+wrap your favorite WebSocket library. The example below uses the
+[coder/websocket](https://github.com/coder/websocket) adapter:
+
+```go
+import (
+    "log"
+    "net/http"
+
+    wrapper "github.com/bminer/ws-server-wrapper-go"
+    "github.com/bminer/ws-server-wrapper-go/adapters/coder"
+    "github.com/coder/websocket"
+)
+
+func main() {
+    wsServer := wrapper.NewServer()
+    // Register an event handler; return values are sent back as a response
+    wsServer.On("echo", func(s string) (string, error) {
+        return s, nil
+    })
+    // Create HTTP server that accepts WebSocket connections on /
+    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        conn, err := websocket.Accept(w, r, nil)
+        if err != nil {
+            return
+        }
+        wsServer.Accept(coder.Wrap(conn))
+    })
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
+```
+
+See the [ws-server-wrapper-go](https://github.com/bminer/ws-server-wrapper-go)
+repository for a complete example and other adapter options.
 
 #### Other servers
 
@@ -141,6 +187,10 @@ socket.on("msg", function (from, msg) {
 socket.emit("msg", "my_name", "This is a test message")
 ```
 
+Note: This module uses `JSON.stringify` to encode data as JSON over the raw
+WebSocket connection. This means that serializing circular references is not
+supported out of the box.
+
 ## Channels
 
 Just like in socket.io, you can "namespace" your events using channels. When
@@ -166,8 +216,8 @@ Server-side Example (_without using ws-server-wrapper_):
 import fs from "node:fs"
 import { WebSocketServer } from "ws"
 import WebSocketWrapper from "ws-wrapper"
-var wss = new WebSocketServer({ port: 3000 })
-var sockets = new Set()
+const wss = new WebSocketServer({ port: 3000 })
+const sockets = new Set()
 wss.on("connection", (socket) => {
   socket = new WebSocketWrapper(socket)
   sockets.add(socket)
@@ -178,7 +228,7 @@ wss.on("connection", (socket) => {
   socket.on("readFile", (path) => {
     // We can return a Promise that eventually resolves
     return new Promise((resolve, reject) => {
-      // `path` should obviously be sanitized, but just go with it...
+      // TODO: `path` should be sanitized for security reasons
       fs.readFile(path, (err, data) => {
         // `err` or `data` are now sent back to the client
         if (err) reject(err)
@@ -196,7 +246,7 @@ Client-side Example:
 
 ```javascript
 // Assuming WebSocketWrapper is somehow available to this scope...
-var socket = new WebSocketWrapper(new WebSocket("ws://" + location.host))
+const socket = new WebSocketWrapper(new WebSocket("ws://" + location.host))
 var p = socket.request("userCount")
 // `p` is a Promise that will resolve when the server responds...
 p.then((count) => {
@@ -219,7 +269,7 @@ socket
 Class: WebSocketWrapper
 
 A WebSocketWrapper simply wraps around a WebSocket to give you well-deserved
-functionality. :)
+functionality. :smile:
 
 `socket = new WebSocketWrapper(webSocketInstance[, options]);`
 
@@ -316,7 +366,10 @@ The EventEmitter-like API looks like this:
   to be passed to the respective event handler. `next([err])` should be called
   to continue processing to the next middleware function. Once all middleware
   have processed the event and called `next`, the event is then processed by the
-  event handler for the `eventName`.
+  event handler for the `eventName`. If `next(err)` is called with an Error, the
+  event will not be handled by subsequent middleware or registered event
+  handlers, and if it's a request, a response rejection is sent back to the
+  remote end.
 - `socket.timeout(tempTimeoutInMs)` Temporarily sets the `requestTimeout` to
   `tempTimeoutInMs` for the next request only. This returns `socket` to allow
   chaining. Typical usage:
@@ -332,7 +385,6 @@ The EventEmitter-like API looks like this:
 
   ```javascript
   const controller = new AbortController()
-
   // The next request can be cancelled using the AbortController
   let promise = socket.signal(controller.signal).request("longOperation", data)
 
@@ -363,6 +415,7 @@ Other methods and properties:
 By default, the WebSocketWrapper provides a queue for data to be sent. Once the
 WebSocket is open, this queue is flushed until the connection is lost. The
 following methods allow one to re-bind a new WebSocket or clear the send queue.
+This is useful for reconnecting or connecting to a different server.
 
 - `socket.abort()` Clears the send queue for this WebSocketWrapper and rejects
   all Promises for pending requests.
@@ -375,9 +428,9 @@ following methods allow one to re-bind a new WebSocket or clear the send queue.
 - `socket.isConnecting` - checks the native WebSocket `readyState` and is `true`
   if and only if the state is CONNECTING.
 - `socket.isConnected` - checks the native WebSocket `readyState` is `true` if
-  and only if the state is CONNECTED.
+  and only if the state is OPEN.
 - `socket.send(data)` If connected, calls the native WebSocket's `send` method;
-  otherwise, the data is added to the WebSocketWrapper's send queue.
+  otherwise, the data string is added to the WebSocketWrapper's send queue.
 - `socket.disconnect()` Closes the native WebSocket
 - `socket.set(key, value)` Saves user data specific to this WebSocketWrapper
 - `socket.get(key)` Retrieves user data. See `socket.set(key, value)` above.

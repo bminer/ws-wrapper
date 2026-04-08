@@ -391,6 +391,68 @@ test("inbound event for a non-existent channel sends rejection", () => {
 })
 
 // ---------------------------------------------------------------------------
+// channel.close()
+// ---------------------------------------------------------------------------
+
+test("channel.close() removes the channel from the wrapper", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ch = wrapper.of("chat")
+	ch.close()
+	assert.notEqual(
+		wrapper.of("chat"),
+		ch,
+		"of() should return a new instance after close"
+	)
+})
+
+test("channel.close() clears registered listeners", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ch = wrapper.of("chat")
+	ch.on("msg", () => {})
+	ch.close()
+	assert.deepEqual(ch.eventNames(), [])
+})
+
+test("channel.close() clears middleware", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ch = wrapper.of("chat")
+	ch.use((_name, _args, next) => next())
+	ch.close()
+	assert.equal(ch._middleware.length, 0)
+})
+
+test("inbound request to a closed channel sends rejection with channel-not-found error", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ch = wrapper.of("chat")
+	ch.on("greet", () => "hello")
+	ch.close()
+	wrapper._onMessage(JSON.stringify({ a: ["greet"], c: "chat", i: 7 }))
+	const reply = lastSent(socket)
+	assert.equal(reply.i, 7)
+	assert.ok(reply.e, "should send a rejection for the closed channel")
+	assert.match(reply.e.message, /channel/i)
+})
+
+test("inbound simple event to a closed channel is silently dropped (no rejection)", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ch = wrapper.of("chat")
+	ch.on("msg", () => {})
+	ch.close()
+	const sentBefore = socket.sent.length
+	wrapper._onMessage(JSON.stringify({ a: ["msg", "hello"], c: "chat" }))
+	assert.equal(
+		socket.sent.length,
+		sentBefore,
+		"no reply should be sent for a simple event"
+	)
+})
+
+// ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
 

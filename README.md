@@ -345,6 +345,9 @@ The EventEmitter-like API looks like this:
 - `socket.emit(eventName[, ...args])` Sends an event down the WebSocket with the
   specified `eventName` calling all listeners for `eventName` on the remote end,
   in the order they were registered, passing the supplied arguments to each.
+
+Request / Response:
+
 - `socket.request(eventName[, ...args])` Sends a request down the WebSocket with
   the specified `eventName` and returns a
   [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise)
@@ -360,16 +363,6 @@ The EventEmitter-like API looks like this:
   respond to the request, a response rejection is immediately sent back by the
   remote end.
 
-- `socket.use(function fn(eventName, args, next) {...})` Adds a middleware
-  function `fn` to receive all messages for the channel. The `eventName`
-  indicates the name of the event or request, and the `args` are the arguments
-  to be passed to the respective event handler. `next([err])` should be called
-  to continue processing to the next middleware function. Once all middleware
-  have processed the event and called `next`, the event is then processed by the
-  event handler for the `eventName`. If `next(err)` is called with an Error, the
-  event will not be handled by subsequent middleware or registered event
-  handlers, and if it's a request, a response rejection is sent back to the
-  remote end.
 - `socket.timeout(tempTimeoutInMs)` Temporarily sets the `requestTimeout` to
   `tempTimeoutInMs` for the next request only. This returns `socket` to allow
   chaining. Typical usage:
@@ -403,12 +396,29 @@ The EventEmitter-like API looks like this:
 The above EventEmitter functions like `on` and `once` are chainable (as
 appropriate).
 
+Middleware:
+
+- `socket.use(function fn(eventName, args, next) {...})` Adds a middleware
+  function `fn` to receive all messages for the channel. The `eventName`
+  indicates the name of the event or request, and the `args` are the arguments
+  to be passed to the respective event handler. `next([err])` should be called
+  to continue processing to the next middleware function. Once all middleware
+  have processed the event and called `next`, the event is then processed by the
+  event handler for the `eventName`. If `next(err)` is called with an Error, the
+  event will not be handled by subsequent middleware or registered event
+  handlers, and if it's a request, a response rejection is sent back to the
+  remote end.
+
 Channel API:
 
 - `socket.of(channelName)` Returns the channel with the specified `channelName`.
   Every channel has the same EventEmitter-like API as described above for
   sending and handling channel-specific events and requests. A channel also has
-  a read-only `name` property.
+  a read-only `name` property matching the `channelName`. If the channel does
+  not already exist, it is created.
+- `channel.close()` Removes the channel from the wrapper and cleans up all
+  registered event listeners and middleware. After calling `close()`, the
+  channel should no longer be used.
 
 Other methods and properties:
 

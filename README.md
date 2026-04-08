@@ -138,8 +138,8 @@ repository for a complete example and other adapter options.
 
 #### Other servers
 
-No such libraries exist yet. :( Please create one, and let me know about it!
-I'll give you beer!
+Please implement ws-wrapper in your favorite language, and let me know about
+it! I'll give you beer!
 
 ## Event Handling
 

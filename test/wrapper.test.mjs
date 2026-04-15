@@ -1528,3 +1528,371 @@ test("channel.close(reason) sets closeSignal.reason", () => {
 	assert.equal(ch.closeSignal.reason, reason, "closeSignal.reason should match")
 })
 
+// ---------------------------------------------------------------------------
+// Integration: multiple events, requests, cancellation, and anonymous channel
+// ---------------------------------------------------------------------------
+
+/** Wire two wrappers together so each side's sends arrive as the other's receives. */
+function makeConnectedPair() {
+	const serverSocket = makeSocket()
+	const clientSocket = makeSocket()
+	const server = new WebSocketWrapper(serverSocket, {})
+	const client = new WebSocketWrapper(clientSocket, {})
+	clientSocket.send = (msg) => {
+		clientSocket.sent.push(msg)
+		server._onMessage(msg)
+	}
+	serverSocket.send = (msg) => {
+		serverSocket.sent.push(msg)
+		client._onMessage(msg)
+	}
+	return { server, client, serverSocket, clientSocket }
+}
+
+test("integration: multiple events, requests, cancellation, and anonymous channel", async () => {
+	const { server, client } = makeConnectedPair()
+	const log = []
+
+	// --- Server-side handlers ---
+	server.on("ping", (msg) => {
+		log.push("server:ping:" + msg)
+	})
+	server.on("echo", (msg) => msg)
+	server.on("slow", () => new Promise(() => {})) // never resolves
+	server.on("open-stream", function () {
+		log.push("server:stream-opened")
+		return this.channel()
+	})
+
+	// 1. Fire-and-forget event
+	client.emit("ping", "hello")
+	assert.ok(log.includes("server:ping:hello"), "server should receive event")
+
+	// 2. Successful round-trip request
+	const echoResult = await client.request("echo", "world")
+	assert.equal(echoResult, "world")
+
+	// 3. Request cancelled via AbortSignal (requires AbortController)
+	if (typeof AbortController === "function") {
+		const ac = new AbortController()
+		const slowP = client.signal(ac.signal).request("slow")
+		const slowId = client._lastRequestId
+		ac.abort("user cancelled")
+		await assert.rejects(slowP, (err) => err.name === "RequestAbortedError")
+		assert.equal(
+			server._activeRequests[slowId],
+			undefined,
+			"server should clean up active request after cancellation"
+		)
+		log.push("client:slow-cancelled")
+	}
+
+	// 4. Request an anonymous channel and iterate it
+	const streamChan = await client.request("open-stream")
+	assert.ok(streamChan.isAnonymous, "should receive an anonymous channel")
+	assert.ok(
+		log.includes("server:stream-opened"),
+		"server stream handler should have run"
+	)
+
+	// Both sides reference the channel by the same request-ID key
+	const serverChan = server._anonymousChannels[String(streamChan._name)]
+	assert.ok(serverChan, "server should hold a matching anonymous channel")
+
+	const iter = streamChan[Symbol.asyncIterator]()
+	const values = []
+
+	// Pull value 1: iter.next() sets `pending` then we emit synchronously
+	const p1 = iter.next() // emits "start" to server; pending set after
+	serverChan.emit("next", { value: 1, done: false })
+	values.push((await p1).value)
+
+	// Pull value 2
+	const p2 = iter.next()
+	serverChan.emit("next", { value: 2, done: false })
+	values.push((await p2).value)
+
+	// Signal done
+	const p3 = iter.next()
+	serverChan.emit("next", { value: undefined, done: true })
+	const final = await p3
+	assert.equal(final.done, true)
+
+	assert.deepEqual(values, [1, 2])
+	log.push("client:stream-done")
+
+	// Verify the overall story
+	assert.ok(log.includes("server:ping:hello"))
+	assert.ok(log.includes("server:stream-opened"))
+	assert.ok(log.includes("client:stream-done"))
+	// Channel is still open (normal completion does not close it)
+	assert.ok(
+		server._anonymousChannels[String(streamChan._name)],
+		"channel stays open"
+	)
+})
+
+// ---------------------------------------------------------------------------
+// Channel reuse: for-await loop called twice on the same channel
+// ---------------------------------------------------------------------------
+
+test("[Symbol.asyncIterator] for-await loop can be used twice on the same channel", async () => {
+	if (typeof AbortController !== "function") return // closeSignal needed for reliable done detection
+	const { server, client } = makeConnectedPair()
+
+	server.on("open-stream", function () {
+		return this.channel()
+	})
+
+	const chan = await client.request("open-stream")
+	const serverChan = server._anonymousChannels[String(chan._name)]
+
+	// First for-await loop — server emits via microtask-deferred callbacks so
+	// that `pending` is set before the values arrive (fake socket is synchronous)
+	serverChan.once("start", () => {
+		Promise.resolve()
+			.then(() => serverChan.emit("next", { value: 10, done: false }))
+			.then(() => serverChan.emit("next", { value: undefined, done: true }))
+	})
+
+	const values1 = []
+	for await (const v of chan) {
+		values1.push(v)
+	}
+	assert.deepEqual(values1, [10])
+	assert.ok(
+		server._anonymousChannels[String(chan._name)],
+		"channel should remain open after first loop"
+	)
+
+	// Second for-await loop — should emit "start" again
+	serverChan.once("start", () => {
+		Promise.resolve()
+			.then(() => serverChan.emit("next", { value: 20, done: false }))
+			.then(() => serverChan.emit("next", { value: undefined, done: true }))
+	})
+
+	const values2 = []
+	for await (const v of chan) {
+		values2.push(v)
+	}
+	assert.deepEqual(values2, [20])
+	assert.ok(
+		server._anonymousChannels[String(chan._name)],
+		"channel should remain open after second loop"
+	)
+})
+
+// ---------------------------------------------------------------------------
+// Without AbortController
+// ---------------------------------------------------------------------------
+
+test("without AbortController: outbound requests resolve and reject normally", async () => {
+	const savedAC = globalThis.AbortController
+	globalThis.AbortController = undefined
+	try {
+		const socket = makeSocket()
+		const wrapper = new WebSocketWrapper(socket, {})
+
+		// Outbound request resolves
+		const p = wrapper.request("ping")
+		const { i: reqId } = JSON.parse(socket.sent[socket.sent.length - 1])
+		wrapper._onMessage(JSON.stringify({ i: reqId, d: "pong" }))
+		assert.equal(await p, "pong")
+
+		// Outbound request rejects
+		const p2 = wrapper.request("fail")
+		const { i: reqId2 } = JSON.parse(socket.sent[socket.sent.length - 1])
+		wrapper._onMessage(
+			JSON.stringify({ i: reqId2, e: { message: "oops" }, _: 1 })
+		)
+		await assert.rejects(
+			p2,
+			(err) => err instanceof Error && err.message === "oops"
+		)
+
+		// No active requests are tracked (no AbortController to back them)
+		assert.equal(wrapper.activeRequestCount, 0)
+		// closeSignal is null when AbortController is unavailable
+		assert.equal(wrapper.closeSignal, null)
+	} finally {
+		globalThis.AbortController = savedAC
+	}
+})
+
+test("without AbortController: inbound requests are handled and return responses", () => {
+	const savedAC = globalThis.AbortController
+	globalThis.AbortController = undefined
+	try {
+		const socket = makeSocket()
+		const wrapper = new WebSocketWrapper(socket, {})
+		wrapper.on("echo", (msg) => msg)
+
+		wrapper._onMessage(JSON.stringify({ a: ["echo", "hi"], i: 42 }))
+		const reply = lastSent(socket)
+		assert.equal(reply.i, 42)
+		assert.equal(reply.d, "hi")
+		// No active request entry (no AbortController)
+		assert.equal(wrapper.activeRequestCount, 0)
+	} finally {
+		globalThis.AbortController = savedAC
+	}
+})
+
+test("without AbortController: inbound cancellation is silently ignored", async () => {
+	const savedAC = globalThis.AbortController
+	globalThis.AbortController = undefined
+	try {
+		const socket = makeSocket()
+		const wrapper = new WebSocketWrapper(socket, {})
+
+		let resolveHandler
+		wrapper.on(
+			"slow",
+			() => new Promise((resolve) => (resolveHandler = resolve))
+		)
+
+		// Start an inbound request
+		wrapper._onMessage(JSON.stringify({ a: ["slow"], i: 5 }))
+
+		// Send a cancellation — without AbortController, activeReqs[5] doesn't
+		// exist so this message is silently ignored
+		const sentBefore = socket.sent.length
+		wrapper._onMessage(JSON.stringify({ x: { message: "cancel" }, _: 1, i: 5 }))
+		assert.equal(
+			socket.sent.length,
+			sentBefore,
+			"no reply should be sent for the ignored cancellation"
+		)
+
+		// The handler is still running; resolve it normally
+		resolveHandler("done")
+		await Promise.resolve()
+		await Promise.resolve()
+		const reply = lastSent(socket)
+		assert.equal(reply.d, "done", "handler should still send its response")
+	} finally {
+		globalThis.AbortController = savedAC
+	}
+})
+
+test("without AbortController: this.channel() is not available in request handlers", () => {
+	const savedAC = globalThis.AbortController
+	globalThis.AbortController = undefined
+	try {
+		const socket = makeSocket()
+		const wrapper = new WebSocketWrapper(socket, {})
+
+		let channelType = "not-called"
+		wrapper.on("test", function () {
+			channelType = typeof this.channel
+			return "ok"
+		})
+		wrapper._onMessage(JSON.stringify({ a: ["test"], i: 1 }))
+		assert.equal(
+			channelType,
+			"undefined",
+			"this.channel should not be available without AbortController"
+		)
+	} finally {
+		globalThis.AbortController = savedAC
+	}
+})
+
+test("without AbortController: this.signal is not available in request handlers", () => {
+	const savedAC = globalThis.AbortController
+	globalThis.AbortController = undefined
+	try {
+		const socket = makeSocket()
+		const wrapper = new WebSocketWrapper(socket, {})
+
+		// Without AbortController the per-request context isn't created, so
+		// `this` inside the handler is the plain channel (which has a signal()
+		// *method*, not a signal *property*).
+		let signalType = "not-called"
+		wrapper.on("test", function () {
+			// this.signal is the signal() chaining method, not an AbortSignal
+			signalType = typeof this.signal
+			return "ok"
+		})
+		wrapper._onMessage(JSON.stringify({ a: ["test"], i: 2 }))
+		assert.equal(
+			signalType,
+			"function",
+			"this.signal should be the chaining method, not an AbortSignal"
+		)
+	} finally {
+		globalThis.AbortController = savedAC
+	}
+})
+
+// ---------------------------------------------------------------------------
+// Nested anonymous channel: handler inside an anonymous channel creates another
+// ---------------------------------------------------------------------------
+
+test("anonymous channel request handler can create a nested anonymous channel", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	// Server: outer stream handler creates an anonymous channel.
+	// That channel exposes a "open-nested" handler that itself creates another
+	// anonymous channel.
+	server.on("open-stream", function () {
+		const outerChan = this.channel()
+		outerChan.on("open-nested", function () {
+			return this.channel()
+		})
+		return outerChan
+	})
+
+	// 1. Client requests the outer anonymous channel
+	const outerChan = await client.request("open-stream")
+	assert.ok(outerChan.isAnonymous, "outer channel should be anonymous")
+
+	const serverOuterChan = server._anonymousChannels[String(outerChan._name)]
+	assert.ok(serverOuterChan, "server should hold the outer anonymous channel")
+
+	// 2. Client makes a request on the outer channel to open a nested channel
+	const nestedChan = await outerChan.request("open-nested")
+	assert.ok(nestedChan.isAnonymous, "nested channel should be anonymous")
+	assert.notEqual(
+		nestedChan._name,
+		outerChan._name,
+		"nested and outer channels must have different names"
+	)
+
+	const serverNestedChan = server._anonymousChannels[String(nestedChan._name)]
+	assert.ok(serverNestedChan, "server should hold the nested anonymous channel")
+
+	// 3. Server emits an event on the nested channel; client receives it
+	let received = null
+	nestedChan.on("data", (val) => {
+		received = val
+	})
+	serverNestedChan.emit("data", "nested-value")
+	assert.equal(
+		received,
+		"nested-value",
+		"client should receive events on nested channel"
+	)
+
+	// 4. Client can also emit on the nested channel back to the server
+	let serverReceived = null
+	serverNestedChan.on("ack", (val) => {
+		serverReceived = val
+	})
+	nestedChan.emit("ack", "client-ack")
+	assert.equal(
+		serverReceived,
+		"client-ack",
+		"server should receive events on nested channel"
+	)
+
+	// 5. Closing the nested channel does not close the outer channel
+	nestedChan.close()
+	assert.equal(client._anonymousChannels[String(nestedChan._name)], undefined)
+	assert.ok(
+		client._anonymousChannels[String(outerChan._name)],
+		"outer channel should still be open"
+	)
+})

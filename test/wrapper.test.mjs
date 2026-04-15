@@ -947,9 +947,25 @@ test("inbound cancellation closes the anonymous channel on the handler side", as
 	wrapper._onMessage(JSON.stringify({ a: ["open-stream"], i: 7 }))
 	const chan = wrapper._anonymousChannels["7"]
 	assert.ok(chan != null, "anonymous channel must be created")
-	// Simulate the requestor cancelling request 7
+	// {i,x} is now a no-op once the channel is open — _activeRequests[7]
+	// was already cleaned up when the {i,h:1} response was sent.
+	// The correct way to close the channel from the requestor is {h,x}.
 	wrapper._onMessage(JSON.stringify({ i: 7, x: { message: "cancelled" } }))
-	assert.equal(wrapper._anonymousChannels["7"], undefined)
+	assert.ok(
+		wrapper._anonymousChannels["7"] != null,
+		"{i,x} should be ignored once anonymous channel is open"
+	)
+	assert.ok(!chan.closeSignal.aborted, "close signal must not be aborted")
+	// {h,x} is the correct protocol for closing an anonymous channel
+	wrapper._onMessage(
+		JSON.stringify({ h: "7", x: { message: "cancelled" }, _: 1 })
+	)
+	assert.equal(
+		wrapper._anonymousChannels["7"],
+		undefined,
+		"{h,x} should close the anonymous channel"
+	)
+	assert.ok(chan.closeSignal.aborted, "close signal must be aborted")
 })
 
 test("anonymous channel timeout aborts the request after TTL", async () => {
@@ -1997,10 +2013,7 @@ test("iterableHandler: non-iterable return value rejects the request", async () 
 	)
 
 	await assert.rejects(client.request("oops"), (err) => {
-		return (
-			err instanceof Error &&
-			/iterable/.test(err.message)
-		)
+		return err instanceof Error && /iterable/.test(err.message)
 	})
 })
 
@@ -2057,7 +2070,11 @@ test("iterableHandler: cancellation from requestor stops iteration", async () =>
 	await new Promise((resolve) => setImmediate(resolve))
 	const yieldCountAfterAbort = yieldCount
 	await new Promise((resolve) => setImmediate(resolve))
-	assert.equal(yieldCount, yieldCountAfterAbort, "server generator should stop after abort")
+	assert.equal(
+		yieldCount,
+		yieldCountAfterAbort,
+		"server generator should stop after abort"
+	)
 })
 
 test("iterableHandler: throws TypeError when fn is not a function", () => {

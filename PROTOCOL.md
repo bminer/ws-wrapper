@@ -82,6 +82,13 @@ The following message types are defined by ws-wrapper:
    handlers on the remote end can access the `AbortSignal` via `this.signal` to
    implement cooperative cancellation.
 
+   Note: `{i, x}` is only meaningful while the handler is still processing the
+   request (i.e. before it responds). Once a handler responds with an anonymous
+   channel (`{i, h: 1}`), the original request is fully resolved and any
+   subsequent `{i, x}` message with the same `i` is silently ignored. To close
+   an anonymous channel after it has been created, use the **Anonymous Channel
+   Abort** (`{h, x}`) message instead.
+
 1. **Anonymous Channel Creation** - Identified by an Object with `i` and `h`
    keys where `h` is truthy. Sent by the handler's side in response to a request
    when the handler returns an anonymous channel via `this.channel()`. The

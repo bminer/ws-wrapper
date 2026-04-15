@@ -1312,6 +1312,100 @@ test("[Symbol.asyncIterator] normal completion does not close the channel", asyn
 	assert.ok(wrapper._anonymousChannels["1"] !== undefined)
 })
 
+test("[Symbol.asyncIterator] concurrent next() returns rejected Promise, not a sync throw", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	const chan = await p
+
+	const iter = chan[Symbol.asyncIterator]()
+	const next1 = iter.next() // pending — no data yet
+	// Second call before first resolves: must return a rejected Promise, not throw
+	let secondCallResult
+	assert.doesNotThrow(() => {
+		secondCallResult = iter.next()
+	})
+	await assert.rejects(secondCallResult, /cannot call next\(\) concurrently/)
+	// First promise still works once data arrives
+	wrapper._onMessage(
+		JSON.stringify({ h: "1", a: ["next", { value: 99, done: false }] })
+	)
+	assert.equal((await next1).value, 99)
+	await iter.return()
+})
+
+test("[Symbol.asyncIterator] return(value) passes value through", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	const chan = await p
+
+	const iter = chan[Symbol.asyncIterator]()
+	const result = await iter.return(42)
+	assert.deepEqual(result, { value: 42, done: true })
+})
+
+test("[Symbol.asyncIterator] return() clears buffered terminal item; next() returns done", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	const chan = await p
+
+	const iter = chan[Symbol.asyncIterator]()
+	// Start the iterator and satisfy the first next() call
+	const first = iter.next()
+	wrapper._onMessage(
+		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
+	)
+	await first
+
+	// Emit the terminal item with no pending consumer — it gets buffered and
+	// done is set to true inside the iterator before return() is called
+	wrapper._onMessage(
+		JSON.stringify({ h: "1", a: ["next", { value: "final", done: true }] })
+	)
+
+	// return() while the terminal item is buffered and done===true
+	const returnResult = await iter.return()
+	assert.deepEqual(returnResult, { value: undefined, done: true })
+
+	// next() must NOT return the stale buffered item
+	const afterReturn = await iter.next()
+	assert.deepEqual(afterReturn, { value: undefined, done: true })
+})
+
+test("[Symbol.asyncIterator] throw() on closed iterator clears stale buffer; next() returns done", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	const chan = await p
+
+	const iter = chan[Symbol.asyncIterator]()
+	// Satisfy initial next() so we can buffer a terminal item
+	const first = iter.next()
+	wrapper._onMessage(
+		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
+	)
+	await first
+
+	// Buffer a terminal item → done becomes true internally
+	wrapper._onMessage(
+		JSON.stringify({ h: "1", a: ["next", { value: "last", done: true }] })
+	)
+
+	// throw() on an already-done iterator should reject and clear stale buffer
+	const throwErr = new Error("abort")
+	await assert.rejects(iter.throw(throwErr), /abort/)
+
+	// next() must NOT return the stale buffered item
+	const afterThrow = await iter.next()
+	assert.deepEqual(afterThrow, { value: undefined, done: true })
+})
+
 test("[Symbol.asyncIterator] can iterate the same channel multiple times", async () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {})

@@ -356,7 +356,8 @@ Anonymous channels should be explicitly closed when done. Use `chan.close()` to
 clean up locally; use `chan.abort()` to also notify the remote end (which closes
 its anonymous channel). Calling `emit` or `request` on a closed channel throws
 an error. If the remote end sends a cancellation for the channel, the local
-channel is automatically closed.
+channel is automatically closed and `closeSignal.reason` is set to the
+reconstructed cancellation reason.
 
 ### One-way streaming (server pushes values to client)
 

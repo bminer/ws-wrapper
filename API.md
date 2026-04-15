@@ -64,16 +64,24 @@ handling channel-specific events and requests.
 - `channel.closeSignal` Read-only `AbortSignal` (or `null` if the runtime does
   not support `AbortController`) that is aborted when the channel is closed via
   `close()` or `abort()`. Use this to register cleanup handlers that run when
-  the channel is torn down:
+  the channel is torn down. The signal's `reason` property reflects the value
+  passed to `close(reason)` or `abort(err)`, including reasons reconstructed
+  from inbound anonymous-channel cancellation messages:
 
   ```javascript
-  chan.closeSignal?.addEventListener("abort", () => clearInterval(timer))
+  chan.closeSignal?.addEventListener("abort", () => {
+  	console.log("channel closed:", chan.closeSignal.reason)
+  	clearInterval(timer)
+  })
   ```
 
-- `channel.close()` Removes the channel from the wrapper and cleans up all
-  registered event listeners and middleware. After calling `close()`, the
+- `channel.close([reason])` Removes the channel from the wrapper and cleans up
+  all registered event listeners and middleware. After calling `close()`, the
   channel should no longer be used. For anonymous channels, any registered abort
-  signal listeners are also removed.
+  signal listeners are also removed. The optional `reason` value is forwarded to
+  the internal `AbortController`, so `closeSignal.reason` will reflect the value
+  passed here. This is also how the reason from an inbound anonymous-channel
+  cancellation message is surfaced to `closeSignal.reason`.
 
 ## EventEmitter-like API
 

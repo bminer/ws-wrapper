@@ -1437,3 +1437,94 @@ test("[Symbol.asyncIterator] can iterate the same channel multiple times", async
 	assert.equal((await next2).value, 2)
 	await iter2.return()
 })
+
+// ---------------------------------------------------------------------------
+// Bug fix: abort() on named channels and already-closed anonymous channels
+// ---------------------------------------------------------------------------
+
+test("abort() on a named channel is a no-op and does not send a cancel message", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ch = wrapper.of("chat")
+	const sentBefore = socket.sent.length
+	// Calling abort() on a named channel should not send {h, x} to the remote.
+	// With the old code (|| instead of &&) this would send a spurious cancel.
+	ch.abort()
+	assert.equal(
+		socket.sent.length,
+		sentBefore,
+		"no cancel message should be sent for a named channel"
+	)
+	// The channel should still be closed after abort()
+	assert.notEqual(
+		wrapper.of("chat"),
+		ch,
+		"channel should be closed after abort()"
+	)
+})
+
+test("abort() on an already-closed anonymous channel does not throw", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	const chan = await p
+	assert.equal(chan.isAnonymous, true)
+	chan.close() // first close — sets _wrapper to null
+	assert.equal(
+		wrapper._anonymousChannels["1"],
+		undefined,
+		"channel should be gone"
+	)
+	// With the old code (|| instead of &&) this crashes: null._sendCancelAnon()
+	assert.doesNotThrow(
+		() => chan.abort(),
+		"abort() on an already-closed anonymous channel must not throw"
+	)
+})
+
+// ---------------------------------------------------------------------------
+// Bug fix: close(reason) propagates reason to closeSignal
+// ---------------------------------------------------------------------------
+
+test("inbound anonymous channel abort propagates reason to closeSignal", async () => {
+	if (typeof AbortController !== "function") return
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	const chan = await p
+
+	// Simulate the handler-side sending an abort with a specific Error reason
+	wrapper._onMessage(
+		JSON.stringify({ h: "1", x: { message: "stream ended" }, _: 1 })
+	)
+	assert.equal(
+		wrapper._anonymousChannels["1"],
+		undefined,
+		"channel should be closed"
+	)
+	// closeSignal should have been aborted with the reconstructed Error reason
+	assert.ok(chan.closeSignal.aborted, "closeSignal should be aborted")
+	assert.ok(
+		chan.closeSignal.reason instanceof Error,
+		"reason should be an Error instance"
+	)
+	assert.equal(
+		chan.closeSignal.reason.message,
+		"stream ended",
+		"reason message should match"
+	)
+})
+
+test("channel.close(reason) sets closeSignal.reason", () => {
+	if (typeof AbortController !== "function") return
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ch = wrapper.of("chat")
+	const reason = new Error("explicit close reason")
+	ch.close(reason)
+	assert.ok(ch.closeSignal.aborted, "closeSignal should be aborted")
+	assert.equal(ch.closeSignal.reason, reason, "closeSignal.reason should match")
+})
+

@@ -43,6 +43,10 @@ export declare class WebSocketChannel {
 	 * {@link close} or {@link abort}). Useful for registering cleanup
 	 * handlers that run when the channel is torn down. `null` if the runtime
 	 * does not support `AbortController`.
+	 *
+	 * The signal's `reason` property reflects the value passed to
+	 * `close(reason)` or `abort(err)`, including reasons reconstructed from
+	 * inbound anonymous-channel cancellation messages.
 	 */
 	readonly closeSignal: AbortSignal | null
 
@@ -135,9 +139,11 @@ export declare class WebSocketChannel {
 
 	/**
 	 * Remove this channel from the wrapper and clean up all listeners,
-	 * middleware, and abort signal subscriptions.
+	 * middleware, and abort signal subscriptions. The optional `reason` is
+	 * forwarded to the internal `AbortController` so that `closeSignal.reason`
+	 * reflects why the channel was closed.
 	 */
-	close(): void
+	close(reason?: unknown): void
 
 	/**
 	 * For anonymous channels only: send a cancellation message to the remote

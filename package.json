@@ -27,7 +27,7 @@
 		"ws": "^8.17.1"
 	},
 	"scripts": {
-		"format": "prettier --config .prettierrc --write \"**/*.{js,mjs}\"",
+		"format": "prettier --config .prettierrc --write \"**/*.{js,mjs,md}\"",
 		"build-example": "parcel build --no-cache --dist-dir ./example-app/dist ./example-app/index.html",
 		"lint": "eslint . --ignore-pattern \"**/dist\"",
 		"test": "node --test"

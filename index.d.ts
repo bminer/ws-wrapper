@@ -31,20 +31,51 @@ export declare class WebSocketChannel {
 	readonly name: string | null
 
 	/**
+	 * `true` for anonymous (request-scoped) channels: those created via
+	 * `this.channel()` inside a request handler **and** those received as the
+	 * resolved value of {@link request} on the requestor side.
+	 * `false` for named channels and the root wrapper.
+	 */
+	readonly isAnonymous: boolean
+
+	/**
+	 * An `AbortSignal` that is aborted when this channel is closed (via
+	 * {@link close} or {@link abort}). Useful for registering cleanup
+	 * handlers that run when the channel is torn down. `null` if the runtime
+	 * does not support `AbortController`.
+	 */
+	readonly closeSignal: AbortSignal | null
+
+	/**
 	 * Register a persistent event listener.
 	 * For reserved events (`open`, `close`, `error`, etc.) on the root wrapper
 	 * the listener receives the raw socket event object.  For all other events
 	 * the listener is called with the deserialized arguments from the remote peer.
+	 *
+	 * Inside a **request** handler `this` is a per-request context object that
+	 * inherits all channel methods and additionally exposes:
+	 * - `this.signal` – the request's `AbortSignal` (if cancellation is supported)
+	 * - `this.channel()` – creates and returns an anonymous (request-scoped)
+	 *   {@link WebSocketChannel}. Returns the same instance if called more than
+	 *   once per request. Returning the channel from the handler causes the
+	 *   requestor's `request()` Promise to resolve to the channel instead of a
+	 *   plain value.
 	 */
 	on(eventName: string, listener: (...args: unknown[]) => unknown): this
 	/** Alias for {@link on}. */
-	addListener(eventName: string, listener: (...args: unknown[]) => unknown): this
+	addListener(
+		eventName: string,
+		listener: (...args: unknown[]) => unknown
+	): this
 
 	/** Register a one-time event listener that is removed after it fires once. */
 	once(eventName: string, listener: (...args: unknown[]) => unknown): this
 
 	/** Remove a previously registered listener. */
-	removeListener(eventName: string, listener: (...args: unknown[]) => unknown): this
+	removeListener(
+		eventName: string,
+		listener: (...args: unknown[]) => unknown
+	): this
 	/** Alias for {@link removeListener}. */
 	off(eventName: string, listener: (...args: unknown[]) => unknown): this
 
@@ -60,30 +91,39 @@ export declare class WebSocketChannel {
 	/**
 	 * Emit an event to the remote peer over the WebSocket.
 	 * For reserved events on the root wrapper, emits locally instead.
+	 * Throws if the channel has been closed.
 	 */
 	emit(eventName: string, ...args: unknown[]): void
 
 	/**
 	 * Set a one-shot timeout (ms) for the next {@link request} call only.
 	 * Overrides the wrapper-level `requestTimeout` option for that request.
+	 * Applies to both named and anonymous channels.
+	 *
 	 * @returns This channel for chaining.
 	 */
 	timeout(ms: number): this
 
 	/**
-	 * Attach an {@link AbortSignal} to the next {@link request} call only.
-	 * If the signal is aborted before a response arrives the request is
-	 * cancelled and the returned Promise rejects with {@link RequestAbortedError}.
+	 * Set the AbortSignal for the next {@link request} call only. When the
+	 * signal aborts, the request is cancelled and a cancellation message is
+	 * sent to the remote end. Applies to both named and anonymous channels.
+	 *
 	 * @returns This channel for chaining.
 	 */
 	signal(abortSignal: AbortSignal): this
 
 	/**
-	 * Send a request to the remote peer and return a Promise that resolves with
-	 * the response value.  Rejects with {@link RequestTimeoutError} on timeout,
-	 * or {@link RequestAbortedError} if the request is cancelled.
+	 * Send a request to the remote peer and return a Promise that resolves
+	 * with the response value or with an anonymous {@link WebSocketChannel}
+	 * if the handler returned one. Rejects with {@link RequestTimeoutError}
+	 * on timeout, or {@link RequestAbortedError} if cancelled.
+	 * Throws if the channel has been closed.
 	 */
-	request(eventName: string, ...args: unknown[]): Promise<unknown>
+	request(
+		eventName: string,
+		...args: unknown[]
+	): Promise<unknown | WebSocketChannel>
 
 	/**
 	 * Add a middleware function for this channel.  Middleware runs before event
@@ -92,6 +132,40 @@ export declare class WebSocketChannel {
 	 * @returns This channel for chaining.
 	 */
 	use(fn: MiddlewareFn): this
+
+	/**
+	 * Remove this channel from the wrapper and clean up all listeners,
+	 * middleware, and abort signal subscriptions.
+	 */
+	close(): void
+
+	/**
+	 * For anonymous channels only: send a cancellation message to the remote
+	 * peer and close this channel. The optional `err` is serialized as the
+	 * cancellation reason; if omitted a default {@link RequestAbortedError} is
+	 * sent. A no-op if the channel is not anonymous or is already closed.
+	 */
+	abort(err?: Error): void
+
+	/**
+	 * Returns an async iterator that consumes a one-way stream driven by the
+	 * remote peer. The remote emits `"next"` events on the channel with
+	 * `{ value, done }` payloads. At most one item is buffered; if a second
+	 * item arrives before the consumer calls `next()`, the iterator errors
+	 * but the channel remains open.
+	 *
+	 * Completing the iterator (normally or via `return()`) does **not** close
+	 * the channel, allowing the same channel to be iterated again. Call
+	 * {@link close} or {@link abort} when the channel is no longer needed.
+	 *
+	 * @example
+	 * const chan = await socket.request("open-stream")
+	 * for await (const value of chan) {
+	 *   console.log(value)
+	 * }
+	 * chan.close() // channel stays open after iteration; close when done
+	 */
+	[Symbol.asyncIterator](): AsyncIterator<unknown>
 
 	/** Retrieve user-defined data stored on the underlying socket wrapper. */
 	get(key: string): unknown
@@ -203,10 +277,11 @@ export declare class WebSocketWrapper extends WebSocketChannel {
 
 	/**
 	 * Immediately reject all pending outbound requests and clear the send
-	 * queue.  Useful when tearing down a connection without waiting for
-	 * individual request timeouts.
+	 * queue. Useful when tearing down a connection without waiting for
+	 * individual request timeouts. The optional `err` parameter is accepted
+	 * for API compatibility with {@link WebSocketChannel.abort} but is ignored.
 	 */
-	abort(): this
+	abort(err?: Error): this
 
 	/**
 	 * Get (or lazily create) a {@link WebSocketChannel} for the given

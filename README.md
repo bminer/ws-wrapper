@@ -464,8 +464,54 @@ for await (const value of chan) {
 chan.close()
 ```
 
-See [Async Iterator (One-way Streaming)](#async-iterator-one-way-streaming) in
-the API section for full details on buffering, early exit, and error handling.
+### `iterableHandler` — generators as stream handlers
+
+`iterableHandler` lets you write a streaming handler as a plain JS generator
+(sync or async) instead of wiring `"start"` / `"next"` events by hand. Return
+any sync or async iterable and ws-wrapper handles the rest.
+
+```javascript
+import WebSocketWrapper, { iterableHandler } from "ws-wrapper"
+
+// Sync generator — yields items one by one
+socket.on(
+	"generateNumbers",
+	iterableHandler(function* () {
+		for (let i = 1; i <= 100; i++) yield i
+	})
+)
+
+// Async generator — works with async data sources
+socket.on(
+	"streamRows",
+	iterableHandler(async function* (query) {
+		for await (const row of db.query(query)) {
+			yield row
+		}
+	})
+)
+
+// Any iterable works — arrays, Sets, Maps, generators, ...
+socket.on(
+	"listUsers",
+	iterableHandler(() => activeUsers)
+)
+```
+
+The client side is unchanged — `request()` resolves to the anonymous channel and
+`for await...of` consumes it:
+
+```javascript
+const chan = await socket.request("generateNumbers")
+for await (const value of chan) {
+	console.log(value) // 1, 2, ..., 100
+}
+chan.close()
+```
+
+If the requestor aborts the anonymous channel mid-stream, the generator stops on
+the next iteration. `yield` always evaluates to `undefined` since the stream is
+one-way.
 
 ### Signal inheritance
 
@@ -502,7 +548,7 @@ See [API.md](API.md) for the full API reference, including:
 - Channels (`socket.of()`)
 - EventEmitter-like API (`on`, `once`, `emit`, etc.)
 - Request / Response (`request`, `timeout`, `signal`)
-- Async Iterator (one-way streaming)
+- Async Iterator (one-way streaming) and `iterableHandler`
 - Middleware
 - Other methods, properties, and error classes
 

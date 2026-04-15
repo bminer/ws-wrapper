@@ -224,10 +224,58 @@ The remote handler drives the stream by emitting `"next"` events on the
 anonymous channel with `{ value, done }` payloads. When `done` is `true`, the
 iterator completes; the channel itself remains open.
 
+### `iterableHandler(fn)` helper
+
+`iterableHandler` is a convenience wrapper that lets you write a stream handler
+as a plain generator (sync or async) instead of manually wiring up `"start"` and
+`"next"` events. If `fn` returns a sync or async iterable Object, ws-wrapper
+handles the channel setup automatically. If it returns anything else, the
+requestor's `request()` Promise is rejected with a `TypeError`.
+
+```js
+import WebSocketWrapper, { iterableHandler } from "ws-wrapper"
+
+// Sync generator
+socket.on(
+	"data-stream",
+	iterableHandler(function* (filter) {
+		for (const item of allItems.filter(filter)) {
+			yield item
+		}
+	})
+)
+
+// Async generator
+socket.on(
+	"data-stream",
+	iterableHandler(async function* (filter) {
+		for await (const item of dbCursor(filter)) {
+			yield item
+		}
+	})
+)
+
+// Any iterable works — arrays, Sets, Maps, etc.
+socket.on(
+	"list-users",
+	iterableHandler(function () {
+		return userSet // a Set is iterable
+	})
+)
+```
+
+Since the stream is one-way (handler → requestor), `yield` expressions always
+evaluate to `undefined`; the requestor cannot send values back through the
+channel.
+
+**Cancellation**: if the requestor closes or aborts the anonymous channel while
+the generator is running, iteration stops gracefully on the next `yield`.
+
 **Handshake**: on the first call to `iterator.next()` (including the first
 iteration of `for await...of`), the iterator emits a `"start"` event on the
 channel so the handler knows the consumer is ready. The handler should listen
-for `"start"` before emitting any `"next"` events.
+for `"start"` before emitting any `"next"` events. `iterableHandler` does this
+automatically.
 
 **Buffering**: the iterator buffers at most **one** unconsumed item. The
 consumer must call `next()` (or advance the `for await...of` loop) before the

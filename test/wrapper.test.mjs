@@ -1,6 +1,7 @@
 import { strict as assert } from "assert"
 import test from "node:test"
 import "../lib/channel-iterator.mjs"
+import { iterableHandler } from "../lib/iterable-handler.mjs"
 import WebSocketWrapper from "../lib/wrapper.mjs"
 
 // ---------------------------------------------------------------------------
@@ -1895,4 +1896,170 @@ test("anonymous channel request handler can create a nested anonymous channel", 
 		client._anonymousChannels[String(outerChan._name)],
 		"outer channel should still be open"
 	)
+})
+
+// ---------------------------------------------------------------------------
+// iterableHandler
+// ---------------------------------------------------------------------------
+
+test("iterableHandler: sync generator streams all yielded values then done", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on(
+		"stream",
+		iterableHandler(function* () {
+			yield 1
+			yield 2
+			yield 3
+		})
+	)
+
+	const chan = await client.request("stream")
+	const results = []
+	for await (const val of chan) {
+		results.push(val)
+	}
+	chan.close()
+	assert.deepEqual(results, [1, 2, 3])
+})
+
+test("iterableHandler: async generator streams all yielded values then done", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on(
+		"stream",
+		iterableHandler(async function* () {
+			yield "a"
+			yield "b"
+		})
+	)
+
+	const chan = await client.request("stream")
+	const results = []
+	for await (const val of chan) {
+		results.push(val)
+	}
+	chan.close()
+	assert.deepEqual(results, ["a", "b"])
+})
+
+test("iterableHandler: any sync iterable works (plain array)", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on(
+		"stream",
+		iterableHandler(function () {
+			return [10, 20, 30]
+		})
+	)
+
+	const chan = await client.request("stream")
+	const results = []
+	for await (const val of chan) {
+		results.push(val)
+	}
+	chan.close()
+	assert.deepEqual(results, [10, 20, 30])
+})
+
+test("iterableHandler: handler args are forwarded to the generator", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on(
+		"stream",
+		iterableHandler(function* (start, end) {
+			for (let i = start; i <= end; i++) yield i
+		})
+	)
+
+	const chan = await client.request("stream", 3, 5)
+	const results = []
+	for await (const val of chan) {
+		results.push(val)
+	}
+	chan.close()
+	assert.deepEqual(results, [3, 4, 5])
+})
+
+test("iterableHandler: non-iterable return value rejects the request", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on(
+		"oops",
+		iterableHandler(function () {
+			return 42 // not iterable
+		})
+	)
+
+	await assert.rejects(client.request("oops"), (err) => {
+		return (
+			err instanceof Error &&
+			/iterable/.test(err.message)
+		)
+	})
+})
+
+test("iterableHandler: error thrown inside generator aborts the channel", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on(
+		"stream",
+		iterableHandler(async function* () {
+			yield 1
+			throw new Error("generator blew up")
+		})
+	)
+
+	const chan = await client.request("stream")
+	const iter = chan[Symbol.asyncIterator]()
+	// First value should arrive fine
+	assert.equal((await iter.next()).value, 1)
+	// Second next() should reject because the channel was aborted
+	await assert.rejects(iter.next(), /closed before iteration completed/)
+})
+
+test("iterableHandler: cancellation from requestor stops iteration", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	let yieldCount = 0
+	server.on(
+		"stream",
+		iterableHandler(async function* () {
+			while (true) {
+				yieldCount++
+				yield yieldCount
+				// small delay so the cancel has a chance to close the channel
+				await new Promise((resolve) => setImmediate(resolve))
+			}
+		})
+	)
+
+	const chan = await client.request("stream")
+	const iter = chan[Symbol.asyncIterator]()
+
+	// Consume a couple of values
+	assert.equal((await iter.next()).value, 1)
+	assert.equal((await iter.next()).value, 2)
+
+	// Abort the channel — iterator rejects on the next call
+	chan.abort()
+	await assert.rejects(iter.next(), /closed before iteration completed/)
+
+	// Give the server generator a chance to run; it should stop because closeSignal is aborted
+	await new Promise((resolve) => setImmediate(resolve))
+	await new Promise((resolve) => setImmediate(resolve))
+	const yieldCountAfterAbort = yieldCount
+	await new Promise((resolve) => setImmediate(resolve))
+	assert.equal(yieldCount, yieldCountAfterAbort, "server generator should stop after abort")
+})
+
+test("iterableHandler: throws TypeError when fn is not a function", () => {
+	assert.throws(() => iterableHandler(42), TypeError)
 })

@@ -297,3 +297,28 @@ export declare class WebSocketWrapper extends WebSocketChannel {
 }
 
 export default WebSocketWrapper
+
+/**
+ * Wraps an event handler function so that if it returns a sync or async
+ * iterable, the values are streamed to the requestor via an anonymous channel
+ * using the async iterator protocol. Each yielded value is emitted as a
+ * `"next"` event with `{value, done: false}`. When the iterable is exhausted,
+ * a final `"next"` with `{value: undefined, done: true}` is emitted and the
+ * channel is closed.
+ *
+ * If the handler does not return a sync or async iterable Object, the request
+ * Promise is rejected with a `TypeError`.
+ *
+ * Since the stream is one-way (handler → requestor), `yield` expressions in
+ * generator handlers always evaluate to `undefined`.
+ *
+ * @example
+ * socket.on("data-stream", iterableHandler(function* (filter) {
+ *   for (const item of allItems.filter(filter)) {
+ *     yield item
+ *   }
+ * }))
+ */
+export function iterableHandler(
+	fn: (...args: unknown[]) => Iterable<unknown> | AsyncIterable<unknown>
+): (...args: unknown[]) => unknown

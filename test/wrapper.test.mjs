@@ -536,13 +536,11 @@ test("messages with ws-wrapper:false are ignored", () => {
 	assert.equal(called, false)
 })
 
-test("custom messageCodec.encode is used for outbound protocol frames", () => {
+test("custom messageEncode is used for outbound protocol frames", () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {
-		messageCodec: {
-			encode(msg) {
-				return `bin:${JSON.stringify(msg)}`
-			},
+		messageEncode(msg) {
+			return `bin:${JSON.stringify(msg)}`
 		},
 	})
 	wrapper.emit("hello", "world")
@@ -553,13 +551,11 @@ test("custom messageCodec.encode is used for outbound protocol frames", () => {
 	})
 })
 
-test("custom messageCodec.decode is used for inbound protocol frames", () => {
+test("custom messageDecode is used for inbound protocol frames", () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {
-		messageCodec: {
-			decode(data) {
-				return JSON.parse(Buffer.from(data).toString("utf8"))
-			},
+		messageDecode(data) {
+			return JSON.parse(Buffer.from(data).toString("utf8"))
 		},
 	})
 	let value
@@ -570,13 +566,11 @@ test("custom messageCodec.decode is used for inbound protocol frames", () => {
 	assert.equal(value, "world")
 })
 
-test("custom messageCodec.decode ignores non-object decoded payloads", () => {
+test("custom messageDecode ignores falsy decoded payloads", () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {
-		messageCodec: {
-			decode() {
-				return []
-			},
+		messageDecode() {
+			return null
 		},
 	})
 	let called = false

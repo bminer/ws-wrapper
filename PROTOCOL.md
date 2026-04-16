@@ -3,7 +3,7 @@
 By default, data passed over the native WebSocket should be valid JSON.
 [ws-wrapper](https://github.com/bminer/ws-wrapper/) parses inbound data as JSON
 and determines the message type based on properties in the parsed Object. This
-can be customized with the `messageCodec` constructor option.
+can be customized with `messageEncode` / `messageDecode` constructor options.
 
 The following message types are defined by ws-wrapper:
 

@@ -12,14 +12,6 @@ export interface WebSocketLike {
 	onclose: ((event: unknown) => void) | null
 }
 
-/** Codec used to encode/decode ws-wrapper protocol frames. */
-export interface WebSocketMessageCodec {
-	/** Encode a ws-wrapper protocol object before calling `WebSocket.send()`. */
-	encode?: (message: Record<string, unknown>) => unknown
-	/** Decode raw inbound message data into a ws-wrapper protocol object. */
-	decode?: (data: unknown) => Record<string, unknown> | null | undefined
-}
-
 /**
  * Middleware function signature for use with {@link WebSocketChannel.use}.
  * Call `next()` to pass the event through, or `next(err)` to drop it.
@@ -209,10 +201,16 @@ export interface WebSocketWrapperOptions {
 	requestTimeout?: number
 
 	/**
-	 * Optional wire codec for ws-wrapper protocol frames. Defaults to
-	 * JSON (`JSON.stringify` / `JSON.parse`).
+	 * Optional wire encoder for ws-wrapper protocol frames. Defaults to
+	 * `JSON.stringify`.
 	 */
-	messageCodec?: WebSocketMessageCodec
+	messageEncode?: (message: Record<string, unknown>) => unknown
+
+	/**
+	 * Optional wire decoder for ws-wrapper protocol frames. Defaults to
+	 * `JSON.parse`.
+	 */
+	messageDecode?: (data: unknown) => Record<string, unknown> | null | undefined
 }
 
 /** Thrown when an outbound request exceeds its timeout. */

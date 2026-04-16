@@ -25,8 +25,8 @@ messages yourself, you get:
 
 By default, the wire protocol is a thin JSON layer over the native WebSocket,
 keeping everything interoperable across JavaScript (browser or Node.js) and Go.
-If needed, you can plug in a custom `messageCodec` to encode/decode protocol
-frames (for example, to send binary frames).
+If needed, you can plug in custom `messageEncode` / `messageDecode` functions to
+handle protocol frames (for example, to send binary frames).
 
 ## Why?
 
@@ -196,7 +196,7 @@ socket.emit("msg", "my_name", "This is a test message")
 Note: By default, this module uses `JSON.stringify` / `JSON.parse` to encode
 protocol data over the raw WebSocket connection. This means that encoding
 circular references is not supported out of the box. You can override this with
-the `messageCodec` constructor option.
+the `messageEncode` / `messageDecode` constructor options.
 
 ## Channels
 

@@ -4,12 +4,20 @@
  */
 export interface WebSocketLike {
 	readonly readyState: number
-	send(data: string): void
+	send(data: unknown): void
 	close(code?: number, reason?: string): void
 	onopen: ((event: unknown) => void) | null
-	onmessage: ((event: { data: string }) => void) | null
+	onmessage: ((event: { data: unknown }) => void) | null
 	onerror: ((event: unknown) => void) | null
 	onclose: ((event: unknown) => void) | null
+}
+
+/** Codec used to encode/decode ws-wrapper protocol frames. */
+export interface WebSocketMessageCodec {
+	/** Encode a ws-wrapper protocol object before calling `WebSocket.send()`. */
+	encode?: (message: Record<string, unknown>) => unknown
+	/** Decode raw inbound message data into a ws-wrapper protocol object. */
+	decode?: (data: unknown) => unknown
 }
 
 /**
@@ -199,6 +207,12 @@ export interface WebSocketWrapperOptions {
 	 * this wrapper.  `0` or omitted means no timeout.
 	 */
 	requestTimeout?: number
+
+	/**
+	 * Optional wire codec for ws-wrapper protocol frames. Defaults to
+	 * JSON (`JSON.stringify` / `JSON.parse`).
+	 */
+	messageCodec?: WebSocketMessageCodec
 }
 
 /** Thrown when an outbound request exceeds its timeout. */
@@ -269,11 +283,11 @@ export declare class WebSocketWrapper extends WebSocketChannel {
 	bind(socket: WebSocketLike): this
 
 	/**
-	 * Send a raw string over the WebSocket.  If the socket is not yet open the
+	 * Send raw data over the WebSocket. If the socket is not yet open the
 	 * data is queued and flushed once the connection opens.
 	 * @param ignoreMaxQueueSize - Bypass the {@link MAX_SEND_QUEUE_SIZE} limit.
 	 */
-	send(data: string, ignoreMaxQueueSize?: boolean): this
+	send(data: unknown, ignoreMaxQueueSize?: boolean): this
 
 	/**
 	 * Close the underlying socket.  All arguments are forwarded to

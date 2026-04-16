@@ -1,9 +1,9 @@
 # ws-wrapper Protocol
 
-All data passed over the native WebSocket should be valid JSON, but this is not
-a hard requirement. [ws-wrapper](https://github.com/bminer/ws-wrapper/) will try
-to parse a JSON string and determine the message type based on the properties in
-the parsed Object.
+By default, data passed over the native WebSocket should be valid JSON.
+[ws-wrapper](https://github.com/bminer/ws-wrapper/) parses inbound data as JSON
+and determines the message type based on properties in the parsed Object. This
+can be customized with the `messageCodec` constructor option.
 
 The following message types are defined by ws-wrapper:
 

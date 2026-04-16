@@ -570,6 +570,23 @@ test("custom messageCodec.decode is used for inbound protocol frames", () => {
 	assert.equal(value, "world")
 })
 
+test("custom messageCodec.decode ignores non-object decoded payloads", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {
+		messageCodec: {
+			decode() {
+				return []
+			},
+		},
+	})
+	let called = false
+	wrapper.on("hello", () => {
+		called = true
+	})
+	assert.doesNotThrow(() => wrapper._onMessage("ignored"))
+	assert.equal(called, false)
+})
+
 test("get/set stores and retrieves arbitrary data on the wrapper", () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {})

@@ -17,7 +17,7 @@ export interface WebSocketMessageCodec {
 	/** Encode a ws-wrapper protocol object before calling `WebSocket.send()`. */
 	encode?: (message: Record<string, unknown>) => unknown
 	/** Decode raw inbound message data into a ws-wrapper protocol object. */
-	decode?: (data: unknown) => unknown
+	decode?: (data: unknown) => Record<string, unknown> | null | undefined
 }
 
 /**

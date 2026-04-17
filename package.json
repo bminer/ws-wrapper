@@ -1,6 +1,6 @@
 {
 	"name": "ws-wrapper",
-	"version": "4.1.0",
+	"version": "4.2.0",
 	"description": "Lightweight WebSocket wrapper lib with socket.io-like event handling, requests, and channels",
 	"exports": {
 		".": {
@@ -17,9 +17,11 @@
 		"eventemitter3": "^5.0.1"
 	},
 	"devDependencies": {
-		"eslint": "^9.39.4",
-		"eslint-config-prettier": "^9.1.0",
+		"@eslint/js": "^10.0.1",
+		"eslint": "^10.2.0",
+		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-prettier": "^5.1.3",
+		"globals": "^17.5.0",
 		"koa": "^3.1.2",
 		"koa-static": "^5.0.0",
 		"parcel": "^2.13.3",
@@ -29,7 +31,7 @@
 	"scripts": {
 		"format": "prettier --config .prettierrc --write \"**/*.{js,mjs,md}\"",
 		"build-example": "parcel build --no-cache --dist-dir ./example-app/dist ./example-app/index.html",
-		"lint": "eslint . --ignore-pattern \"**/dist\"",
+		"lint": "eslint .",
 		"test": "node --test"
 	},
 	"repository": {

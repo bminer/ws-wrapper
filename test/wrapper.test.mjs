@@ -1177,7 +1177,7 @@ test("handler-side cancel closes requestor-side anonymous channel", async () => 
 	const wrapper = new WebSocketWrapper(socket, {})
 	const p = wrapper.request("open-stream")
 	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
-	const chan = await p
+	await p
 	assert.ok(wrapper._anonymousChannels["1"], "channel should exist")
 	// Simulate handler side sending an anonymous channel abort message
 	wrapper._onMessage(
@@ -1309,7 +1309,7 @@ test("[Symbol.asyncIterator] emits start event on first next() call", async () =
 
 	const iter = chan[Symbol.asyncIterator]()
 	// First next() should emit "start" on the channel
-	const nextPromise = iter.next()
+	iter.next()
 	const startMsg = lastSent(socket)
 	assert.equal(startMsg.h, "1")
 	assert.deepEqual(startMsg.a, ["start"])
@@ -1332,7 +1332,7 @@ test("[Symbol.asyncIterator] does not emit start on subsequent next() calls", as
 		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
 	)
 	await nextPromise1
-	const nextPromise2 = iter.next() // should NOT emit "start" again
+	iter.next() // should NOT emit "start" again
 	assert.equal(socket.sent.length, sentCountAfterFirst) // no new message
 	await iter.return()
 })

@@ -12,11 +12,12 @@ for (const g in globals.browser) {
 }
 
 export default [
+	{ ignores: ["**/dist"] },
 	js.configs.recommended,
 	prettierPlugin,
 	{
 		languageOptions: {
-			ecmaVersion: 2018,
+			ecmaVersion: 2020,
 			sourceType: "module",
 			globals: {
 				...primaryGlobals,

@@ -22,6 +22,10 @@ Constructs a new WebSocketWrapper and binds it to the native WebSocket instance.
     This option is recommended for servers because clients who do not fulfill
     pending requests can cause memory leaks. As of version 4, we send
     cancellation messages to the remote end for requests that time out.
+  - `messageEncode` - optional function to encode ws-wrapper protocol Objects
+    before `WebSocket.send()`. Defaults to `JSON.stringify`.
+  - `messageDecode` - optional function to decode inbound `event.data` before
+    ws-wrapper routing. Defaults to `JSON.parse`.
 
 Events
 

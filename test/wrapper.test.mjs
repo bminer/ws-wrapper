@@ -536,6 +536,51 @@ test("messages with ws-wrapper:false are ignored", () => {
 	assert.equal(called, false)
 })
 
+test("custom messageEncode is used for outbound protocol frames", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {
+		messageEncode(msg) {
+			return `bin:${JSON.stringify(msg)}`
+		},
+	})
+	wrapper.emit("hello", "world")
+	assert.equal(typeof socket.sent[0], "string")
+	assert.equal(socket.sent[0].startsWith("bin:"), true)
+	assert.deepEqual(JSON.parse(socket.sent[0].slice(4)), {
+		a: ["hello", "world"],
+	})
+})
+
+test("custom messageDecode is used for inbound protocol frames", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {
+		messageDecode(data) {
+			return JSON.parse(Buffer.from(data).toString("utf8"))
+		},
+	})
+	let value
+	wrapper.on("hello", (msg) => {
+		value = msg
+	})
+	wrapper._onMessage(Buffer.from(JSON.stringify({ a: ["hello", "world"] })))
+	assert.equal(value, "world")
+})
+
+test("custom messageDecode ignores falsy decoded payloads", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {
+		messageDecode() {
+			return null
+		},
+	})
+	let called = false
+	wrapper.on("hello", () => {
+		called = true
+	})
+	assert.doesNotThrow(() => wrapper._onMessage("ignored"))
+	assert.equal(called, false)
+})
+
 test("get/set stores and retrieves arbitrary data on the wrapper", () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {})

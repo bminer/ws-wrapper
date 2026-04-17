@@ -23,8 +23,10 @@ messages yourself, you get:
 - **Bi-directionality** – clients can request data from the server, and the
   server can also request data from clients
 
-The wire protocol is a thin JSON layer over the native WebSocket, keeping
-everything interoperable across JavaScript (browser or Node.js) and Go.
+By default, the wire protocol is a thin JSON layer over the native WebSocket,
+keeping everything interoperable across JavaScript (browser or Node.js) and Go.
+If needed, you can plug in custom `messageEncode` / `messageDecode` functions to
+handle protocol frames (for example, to send binary frames).
 
 ## Why?
 
@@ -191,9 +193,10 @@ socket.on("msg", function (from, msg) {
 socket.emit("msg", "my_name", "This is a test message")
 ```
 
-Note: This module uses `JSON.stringify` to encode data as JSON over the raw
-WebSocket connection. This means that encoding circular references is not
-supported out of the box.
+Note: By default, this module uses `JSON.stringify` / `JSON.parse` to encode
+protocol data over the raw WebSocket connection. This means that encoding
+circular references is not supported out of the box. You can override this with
+the `messageEncode` / `messageDecode` constructor options.
 
 ## Channels
 

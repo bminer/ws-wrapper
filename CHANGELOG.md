@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.1.0] - 2026-03-29
 
+### Added
+
+- See 4.0.0 below for further details.
+
 ### Changed
 
 - Redesigned encoding of rejection and cancellation payloads.
@@ -40,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `package.json` example-app bundling configuration.
 
-## [4.0.0] - 2026-03-28
+## [4.0.0] - 2026-03-28 [YANKED]
 
 ### Added
 

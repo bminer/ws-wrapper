@@ -110,9 +110,11 @@ Both the WebSocketWrapper and WebSocketChannel implement the following methods:
   `Promise` is rejected, an unhandled rejection will not occur; rather, the
   result of the Promise is just ignored.
 
-  If the `listener` throws an Error, this Error will propagate up the stack as
-  expected, and if the inbound message was a request, the Error is sent back to
-  the remote end as a response rejection.
+  If the `listener` throws an Error and the inbound message was a request, the
+  Error is sent back to the remote end as a response rejection. For simple
+  events, the Error is silently dropped. This is intentional: event handlers
+  often don't distinguish between the two cases, so propagating the error
+  further would cause surprising crashes.
 
   Event listeners also have access to `this`, which points to the event
   listener's socket / channel. In addition to the channel's API, the following

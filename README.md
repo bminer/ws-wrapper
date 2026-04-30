@@ -37,6 +37,34 @@ the event handling and request/response patterns you actually want – without t
 overhead. The entire library and its dependencies weigh **under 12 KB minified**
 (**under 4 KB** minified and gzipped).
 
+## Comparison
+
+| Feature                                 | ws-wrapper | [Socket.IO](https://socket.io/) | [ws](https://github.com/websockets/ws) | [SockJS](https://github.com/sockjs/sockjs-client) |
+| --------------------------------------- | :--------: | :-----------------------------: | :------------------------------------: | :-----------------------------------------------: |
+| Uses native WebSocket                   |     ✅     |             ❌ [^1]             |                   ✅                   |                      ❌ [^1]                      |
+| Unnecessary HTTP polling fallback       |     ❌     |               ✅                |                   ❌                   |                        ✅                         |
+| Auto-reconnect                          |   ❌[^2]   |               ✅                |                   ❌                   |                        ✅                         |
+| Named events                            |     ✅     |               ✅                |                   ❌                   |                        ❌                         |
+| Request / response                      |     ✅     |               ✅                |                   ❌                   |                        ❌                         |
+| Channels / rooms [^3]                   |     ✅     |               ✅                |                   ❌                   |                        ❌                         |
+| Streaming                               |     ✅     |               ❌                |                   ❌                   |                        ❌                         |
+| Middleware                              |     ✅     |               ✅                |                   ❌                   |                        ❌                         |
+| Request cancellation (i.e. AbortSignal) |     ✅     |               ❌                |                   ❌                   |                        ❌                         |
+| Custom encoding                         |     ✅     |               ✅                |                   ✅                   |                        ❌                         |
+| Browser bundle (min + gzip)             |   ~4 KB    |             ~25 KB              |                  N/A                   |                       ~8 KB                       |
+
+[^1]: Library protocol is not compatible with a bare WebSocket
+
+[^2]: Easy to implement
+
+[^3]:
+    ws-wrapper **channels** are persistent namespaces scoped to a single
+    connection (similar to Socket.IO
+    [namespaces](https://socket.io/docs/v4/namespaces/)). ws-wrapper **anonymous
+    channels** are request-scoped and suit streaming / iterator patterns –
+    loosely analogous to Socket.IO [rooms](https://socket.io/docs/v4/rooms/) in
+    that they scope a subset of communication.
+
 ## Install
 
 **Node.js / Browser**

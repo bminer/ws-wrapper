@@ -15,7 +15,7 @@
 	"exports": {
 		".": {
 			"types": "./index.d.ts",
-			"default": "./lib/wrapper.mjs"
+			"default": "./index.mjs"
 		}
 	},
 	"browserslist": "defaults",

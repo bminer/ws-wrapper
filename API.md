@@ -58,6 +58,7 @@ be created to namespace events, despite using a single WebSocket connection.
 `const channel = socket.of(channelName)`
 
 Returns the channel with the specified `channelName`, creating it if needed.
+Throws a `TypeError` if `channelName` is an empty string.
 Every channel has the same EventEmitter-like API described below for sending and
 handling channel-specific events and requests.
 

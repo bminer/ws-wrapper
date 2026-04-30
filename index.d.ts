@@ -305,6 +305,7 @@ export declare class WebSocketWrapper extends WebSocketChannel {
 	/**
 	 * Get (or lazily create) a {@link WebSocketChannel} for the given
 	 * namespace.  Returns `this` when `namespace` is `null` or `undefined`.
+	 * Throws a `TypeError` if `namespace` is an empty string.
 	 */
 	of(namespace: string | null | undefined): WebSocketChannel
 }

@@ -371,6 +371,15 @@ test("of(null) returns the wrapper itself", () => {
 	assert.equal(wrapper.of(null), wrapper)
 })
 
+test("of('') throws a TypeError", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	assert.throws(
+		() => wrapper.of(""),
+		(err) => err instanceof TypeError
+	)
+})
+
 test("channel routes inbound events to the correct channel", () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {})

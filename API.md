@@ -14,9 +14,11 @@ Constructs a new WebSocketWrapper and binds it to the native WebSocket instance.
 - `options`
   - `debug` - set to `true` to print debugging messages to `console.log`; set to
     a function to call the custom function.
-  - `errorToJSON` - function to encode Errors over the WebSocket. In Node.js,
-    the default is to send only the `message` property of the Error (for
-    security reasons). Errors that occur on the browser include all properties.
+  - `errorToJSON` - function to encode Errors over the WebSocket. By default,
+    only the `message` property is sent (for security reasons). When running in
+    a browser environment (detected via `typeof document !== "undefined"`), all
+    own properties of the Error are sent so that custom error fields are
+    preserved on the receiving end.
   - `requestTimeout` - default request timeout in milliseconds for outbound
     requests. Defaults to `null`, which means that there will be no timeout.
     This option is recommended for servers because clients who do not fulfill

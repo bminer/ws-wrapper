@@ -215,12 +215,12 @@ test("inbound cancellation aborts the active request handler", () => {
 	})
 	wrapper._onMessage(JSON.stringify({ a: ["doWork"], i: 7 }))
 	if (typeof AbortController === "function") {
-		assert.ok(wrapper._activeRequests[7], "should track active request")
+		assert.ok(wrapper._activeRequests.get(7), "should track active request")
 		wrapper._onMessage(
 			JSON.stringify({ x: { message: "Request aborted" }, _: 1, i: 7 })
 		)
 		assert.equal(
-			wrapper._activeRequests[7],
+			wrapper._activeRequests.get(7),
 			undefined,
 			"active request should be cleaned up after cancellation"
 		)
@@ -894,7 +894,7 @@ test("handler returning this.channel() sends {i, h:1} response", () => {
 	const reply = lastSent(socket)
 	assert.equal(reply.i, 99)
 	assert.equal(reply.h, 1)
-	assert.equal(wrapper._anonymousChannels["99"] != null, true)
+	assert.equal(wrapper._anonymousChannels.get(99) != null, true)
 })
 
 test("async handler returning this.channel() sends {i, h:1} response", async () => {
@@ -911,7 +911,7 @@ test("async handler returning this.channel() sends {i, h:1} response", async () 
 	const reply = lastSent(socket)
 	assert.equal(reply.i, 77)
 	assert.equal(reply.h, 1)
-	assert.ok(wrapper._anonymousChannels["77"] != null)
+	assert.ok(wrapper._anonymousChannels.get(77) != null)
 	// })
 })
 
@@ -924,7 +924,7 @@ test("requestor receives a WebSocketChannel when {i, h:1} response arrives", () 
 	return p.then((chan) => {
 		assert.equal(chan != null && typeof chan.on === "function", true)
 		assert.equal(chan.isAnonymous, true)
-		assert.equal(wrapper._anonymousChannels["1"], chan)
+		assert.equal(wrapper._anonymousChannels.get(1), chan)
 	})
 })
 
@@ -940,6 +940,34 @@ test("anonymous channel events are routed via h field", () => {
 			received = value
 		})
 		// Server emits an event on the anonymous channel
+		wrapper._onMessage(JSON.stringify({ a: ["data", "hello"], h: 1 }))
+		assert.equal(received, "hello")
+	})
+})
+
+test("h field as numeric string is normalized (backward compat)", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	// Simulate an older peer sending h as a string
+	wrapper._onMessage(JSON.stringify({ i: 1, h: "1" }))
+	return p.then((chan) => {
+		assert.equal(chan != null && typeof chan.on === "function", true)
+		assert.equal(wrapper._anonymousChannels.get(1), chan)
+	})
+})
+
+test("anonymous channel events routed when h field is a numeric string", () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p = wrapper.request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	return p.then((chan) => {
+		let received = null
+		chan.on("data", (value) => {
+			received = value
+		})
+		// Simulate an older peer sending h as a string
 		wrapper._onMessage(JSON.stringify({ a: ["data", "hello"], h: "1" }))
 		assert.equal(received, "hello")
 	})
@@ -953,7 +981,7 @@ test("emit on anonymous channel sends h field instead of c", () => {
 	return p.then((chan) => {
 		chan.emit("ack", 42)
 		const msg = lastSent(socket)
-		assert.equal(msg.h, "1")
+		assert.equal(msg.h, 1)
 		assert.equal(msg.c, undefined)
 		assert.deepEqual(msg.a, ["ack", 42])
 	})
@@ -1003,9 +1031,9 @@ test("close() removes anonymous channel and cleans up signals", () => {
 	const p = wrapper.request("open-stream")
 	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
 	return p.then((chan) => {
-		assert.equal(wrapper._anonymousChannels["1"], chan)
+		assert.equal(wrapper._anonymousChannels.get(1), chan)
 		chan.close()
-		assert.equal(wrapper._anonymousChannels["1"], undefined)
+		assert.equal(wrapper._anonymousChannels.get(1), undefined)
 	})
 })
 
@@ -1018,23 +1046,23 @@ test("inbound cancellation closes the anonymous channel on the handler side", as
 		return this.channel()
 	})
 	wrapper._onMessage(JSON.stringify({ a: ["open-stream"], i: 7 }))
-	const chan = wrapper._anonymousChannels["7"]
+	const chan = wrapper._anonymousChannels.get(7)
 	assert.ok(chan != null, "anonymous channel must be created")
-	// {i,x} is now a no-op once the channel is open — _activeRequests[7]
+	// {i,x} is now a no-op once the channel is open — _activeRequests.get(7)
 	// was already cleaned up when the {i,h:1} response was sent.
 	// The correct way to close the channel from the requestor is {h,x}.
 	wrapper._onMessage(JSON.stringify({ i: 7, x: { message: "cancelled" } }))
 	assert.ok(
-		wrapper._anonymousChannels["7"] != null,
+		wrapper._anonymousChannels.get(7) != null,
 		"{i,x} should be ignored once anonymous channel is open"
 	)
 	assert.ok(!chan.closeSignal.aborted, "close signal must not be aborted")
 	// {h,x} is the correct protocol for closing an anonymous channel
 	wrapper._onMessage(
-		JSON.stringify({ h: "7", x: { message: "cancelled" }, _: 1 })
+		JSON.stringify({ h: 7, x: { message: "cancelled" }, _: 1 })
 	)
 	assert.equal(
-		wrapper._anonymousChannels["7"],
+		wrapper._anonymousChannels.get(7),
 		undefined,
 		"{h,x} should close the anonymous channel"
 	)
@@ -1054,15 +1082,15 @@ test("anonymous channel timeout aborts the request after TTL", async () => {
 	assert.equal(reqMsg.a.length, 2)
 	assert.equal(reqMsg.a[0], "echo")
 	assert.equal(reqMsg.a[1], "hello")
-	assert.equal(reqMsg.h, "1")
-	assert.equal(wrapper._anonymousChannels["1"], chan)
+	assert.equal(reqMsg.h, 1)
+	assert.equal(wrapper._anonymousChannels.get(1), chan)
 	try {
 		await req2P
 		assert.ok(false, "request should throw an error")
 	} catch (err) {
 		assert.equal(err.message, "Request timed out")
 	}
-	assert.equal(wrapper._anonymousChannels["1"], chan)
+	assert.equal(wrapper._anonymousChannels.get(1), chan)
 	// abort() should have sent {h, x} to notify the remote
 	const cancelMsg = lastSent(socket)
 	assert.equal(cancelMsg.i, wrapper._lastRequestId)
@@ -1083,10 +1111,10 @@ test("anonymous channel signal() aborts request, not channel", async () => {
 	assert.equal(reqMsg.a.length, 2)
 	assert.equal(reqMsg.a[0], "echo")
 	assert.equal(reqMsg.a[1], "hello")
-	assert.equal(reqMsg.h, "1")
-	assert.equal(wrapper._anonymousChannels["1"], chan)
+	assert.equal(reqMsg.h, 1)
+	assert.equal(wrapper._anonymousChannels.get(1), chan)
 	ac.abort()
-	assert.equal(wrapper._anonymousChannels["1"], chan)
+	assert.equal(wrapper._anonymousChannels.get(1), chan)
 	try {
 		await req2P
 		assert.ok(false, "request should throw an error")
@@ -1119,12 +1147,12 @@ test("unknown anonymous channel message sends fail-safe cancel, and rejects if i
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {})
 	// Emit on a non-existent anonymous channel (no sub-request)
-	wrapper._onMessage(JSON.stringify({ a: ["data", "x"], h: "99" }))
+	wrapper._onMessage(JSON.stringify({ a: ["data", "x"], h: 99 }))
 	const cancel = lastSent(socket)
-	assert.equal(cancel.h, "99")
+	assert.equal(cancel.h, 99)
 	assert.ok(cancel.x != null, "should send a cancel for the channel")
 	// Emit with a sub-request: should also send a reject for the sub-request
-	wrapper._onMessage(JSON.stringify({ a: ["data", "x"], h: "99", i: 5 }))
+	wrapper._onMessage(JSON.stringify({ a: ["data", "x"], h: 99, i: 5 }))
 	const reply = lastSent(socket)
 	assert.equal(reply.i, 5)
 	assert.ok(
@@ -1143,7 +1171,7 @@ test("close() on handler-side channel does not abort request", () => {
 		return this.channel()
 	})
 	wrapper._onMessage(JSON.stringify({ a: ["open-stream"], i: 3 }))
-	const chan = wrapper._anonymousChannels["3"]
+	const chan = wrapper._anonymousChannels.get(3)
 	assert.ok(chan, "anonymous channel should exist")
 	assert.ok(handlerSignal, "handler should have signal")
 	assert.equal(handlerSignal.aborted, false)
@@ -1161,21 +1189,21 @@ test("message to closed anonymous channel triggers fail-safe cancel to remote", 
 		return chan
 	})
 	wrapper._onMessage(JSON.stringify({ a: ["open-stream"], i: 4 }))
-	assert.ok(wrapper._anonymousChannels["4"], "channel should be registered")
+	assert.ok(wrapper._anonymousChannels.get(4), "channel should be registered")
 	// Close the channel locally
-	wrapper._anonymousChannels["4"].close()
-	assert.equal(wrapper._anonymousChannels["4"], undefined)
+	wrapper._anonymousChannels.get(4).close()
+	assert.equal(wrapper._anonymousChannels.get(4), undefined)
 	// Remote sends a "next" event after close — should trigger fail-safe cancel
 	const prevSentCount = socket.sent.length
 	wrapper._onMessage(
-		JSON.stringify({ h: "4", a: ["next", { value: 1, done: false }] })
+		JSON.stringify({ h: 4, a: ["next", { value: 1, done: false }] })
 	)
 	assert.ok(
 		socket.sent.length > prevSentCount,
 		"a message should have been sent"
 	)
 	const cancelMsg = lastSent(socket)
-	assert.equal(cancelMsg.h, "4")
+	assert.equal(cancelMsg.h, 4)
 	assert.ok(cancelMsg.x != null, "fail-safe cancel should have been sent")
 })
 
@@ -1186,16 +1214,16 @@ test("chan.abort() sends cancel and closes requestor-side anonymous channel", as
 	const p = wrapper.request("open-stream")
 	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
 	const chan = await p
-	assert.ok(wrapper._anonymousChannels["1"], "channel should exist")
+	assert.ok(wrapper._anonymousChannels.get(1), "channel should exist")
 	const err = new Error("user aborted")
 	chan.abort(err)
 	assert.equal(
-		wrapper._anonymousChannels["1"],
+		wrapper._anonymousChannels.get(1),
 		undefined,
 		"channel should be closed"
 	)
 	const cancelMsg = lastSent(socket)
-	assert.equal(cancelMsg.h, "1")
+	assert.equal(cancelMsg.h, 1)
 	assert.ok(cancelMsg.x != null, "cancel message should have been sent")
 })
 
@@ -1206,13 +1234,13 @@ test("handler-side cancel closes requestor-side anonymous channel", async () => 
 	const p = wrapper.request("open-stream")
 	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
 	await p
-	assert.ok(wrapper._anonymousChannels["1"], "channel should exist")
+	assert.ok(wrapper._anonymousChannels.get(1), "channel should exist")
 	// Simulate handler side sending an anonymous channel abort message
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", x: { message: "handler aborted" }, _: 1 })
+		JSON.stringify({ h: 1, x: { message: "handler aborted" }, _: 1 })
 	)
 	assert.equal(
-		wrapper._anonymousChannels["1"],
+		wrapper._anonymousChannels.get(1),
 		undefined,
 		"channel should be closed by inbound cancel"
 	)
@@ -1236,19 +1264,19 @@ test("[Symbol.asyncIterator] yields values from remote next events", async () =>
 	// Deliver two values then done
 	const nextPromise1 = iter.next()
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 10, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 10, done: false }] })
 	)
 	results.push((await nextPromise1).value)
 
 	const nextPromise2 = iter.next()
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 20, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 20, done: false }] })
 	)
 	results.push((await nextPromise2).value)
 
 	const nextPromise3 = iter.next()
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: undefined, done: true }] })
+		JSON.stringify({ h: 1, a: ["next", { value: undefined, done: true }] })
 	)
 	const final = await nextPromise3
 	assert.equal(final.done, true)
@@ -1266,7 +1294,7 @@ test("[Symbol.asyncIterator] buffers one item when consumer is slow", async () =
 	const iter = chan[Symbol.asyncIterator]()
 	// Emit before consumer calls next()
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 42, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 42, done: false }] })
 	)
 	const result = await iter.next()
 	assert.equal(result.value, 42)
@@ -1285,17 +1313,17 @@ test("[Symbol.asyncIterator] buffer overflow errors iterator but leaves channel 
 	const iter = chan[Symbol.asyncIterator]()
 	// Fill the buffer
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 1, done: false }] })
 	)
 	// Overflow
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 2, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 2, done: false }] })
 	)
 
 	// The buffered item is an error now
 	await assert.rejects(() => iter.next(), /buffer overflow/)
 	// Channel itself is still open
-	assert.ok(wrapper._anonymousChannels["1"] !== undefined)
+	assert.ok(wrapper._anonymousChannels.get(1) !== undefined)
 })
 
 test("[Symbol.asyncIterator] return() does not close the channel", async () => {
@@ -1308,7 +1336,7 @@ test("[Symbol.asyncIterator] return() does not close the channel", async () => {
 	const iter = chan[Symbol.asyncIterator]()
 	await iter.return()
 	// Channel remains open after return()
-	assert.ok(wrapper._anonymousChannels["1"] !== undefined)
+	assert.ok(wrapper._anonymousChannels.get(1) !== undefined)
 	// Subsequent next() returns done immediately
 	const result = await iter.next()
 	assert.equal(result.done, true)
@@ -1339,7 +1367,7 @@ test("[Symbol.asyncIterator] emits start event on first next() call", async () =
 	// First next() should emit "start" on the channel
 	iter.next()
 	const startMsg = lastSent(socket)
-	assert.equal(startMsg.h, "1")
+	assert.equal(startMsg.h, 1)
 	assert.deepEqual(startMsg.a, ["start"])
 	// Satisfy the pending consumer so no unresolved promise lingers
 	await iter.return()
@@ -1357,7 +1385,7 @@ test("[Symbol.asyncIterator] does not emit start on subsequent next() calls", as
 	const sentCountAfterFirst = socket.sent.length
 	// Deliver first value to satisfy pending
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 1, done: false }] })
 	)
 	await nextPromise1
 	iter.next() // should NOT emit "start" again
@@ -1376,10 +1404,10 @@ test("[Symbol.asyncIterator] throw() sends cancellation and rejects", async () =
 	const err = new Error("test error")
 	await assert.rejects(() => iter.throw(err), /test error/)
 	// Channel should be closed
-	assert.equal(wrapper._anonymousChannels["1"], undefined)
+	assert.equal(wrapper._anonymousChannels.get(1), undefined)
 	// Cancellation message sent to remote via chan.abort() using {h, x} format
 	const cancelMsg = lastSent(socket)
-	assert.equal(cancelMsg.h, "1")
+	assert.equal(cancelMsg.h, 1)
 	assert.ok(cancelMsg.x != null)
 })
 
@@ -1394,12 +1422,12 @@ test("[Symbol.asyncIterator] normal completion does not close the channel", asyn
 	// Start and deliver a done signal
 	const nextPromise = iter.next() // emits "start"
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: undefined, done: true }] })
+		JSON.stringify({ h: 1, a: ["next", { value: undefined, done: true }] })
 	)
 	const final = await nextPromise
 	assert.equal(final.done, true)
 	// Channel remains open after natural completion
-	assert.ok(wrapper._anonymousChannels["1"] !== undefined)
+	assert.ok(wrapper._anonymousChannels.get(1) !== undefined)
 })
 
 test("[Symbol.asyncIterator] concurrent next() returns rejected Promise, not a sync throw", async () => {
@@ -1419,7 +1447,7 @@ test("[Symbol.asyncIterator] concurrent next() returns rejected Promise, not a s
 	await assert.rejects(secondCallResult, /cannot call next\(\) concurrently/)
 	// First promise still works once data arrives
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 99, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 99, done: false }] })
 	)
 	assert.equal((await next1).value, 99)
 	await iter.return()
@@ -1448,14 +1476,14 @@ test("[Symbol.asyncIterator] return() clears buffered terminal item; next() retu
 	// Start the iterator and satisfy the first next() call
 	const first = iter.next()
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 1, done: false }] })
 	)
 	await first
 
 	// Emit the terminal item with no pending consumer — it gets buffered and
 	// done is set to true inside the iterator before return() is called
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: "final", done: true }] })
+		JSON.stringify({ h: 1, a: ["next", { value: "final", done: true }] })
 	)
 
 	// return() while the terminal item is buffered and done===true
@@ -1478,13 +1506,13 @@ test("[Symbol.asyncIterator] throw() on closed iterator clears stale buffer; nex
 	// Satisfy initial next() so we can buffer a terminal item
 	const first = iter.next()
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 1, done: false }] })
 	)
 	await first
 
 	// Buffer a terminal item → done becomes true internally
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: "last", done: true }] })
+		JSON.stringify({ h: 1, a: ["next", { value: "last", done: true }] })
 	)
 
 	// throw() on an already-done iterator should reject and clear stale buffer
@@ -1509,7 +1537,7 @@ test("[Symbol.asyncIterator] can iterate the same channel multiple times", async
 	const startMsg1 = lastSent(socket)
 	assert.deepEqual(startMsg1.a, ["start"])
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 1, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 1, done: false }] })
 	)
 	assert.equal((await next1).value, 1)
 	await iter1.return() // end first iteration without closing channel
@@ -1522,7 +1550,7 @@ test("[Symbol.asyncIterator] can iterate the same channel multiple times", async
 	const startMsg2 = lastSent(socket)
 	assert.deepEqual(startMsg2.a, ["start"])
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", a: ["next", { value: 2, done: false }] })
+		JSON.stringify({ h: 1, a: ["next", { value: 2, done: false }] })
 	)
 	assert.equal((await next2).value, 2)
 	await iter2.return()
@@ -1562,7 +1590,7 @@ test("abort() on an already-closed anonymous channel does not throw", async () =
 	assert.equal(chan.isAnonymous, true)
 	chan.close() // first close — sets _wrapper to null
 	assert.equal(
-		wrapper._anonymousChannels["1"],
+		wrapper._anonymousChannels.get(1),
 		undefined,
 		"channel should be gone"
 	)
@@ -1587,10 +1615,10 @@ test("inbound anonymous channel abort propagates reason to closeSignal", async (
 
 	// Simulate the handler-side sending an abort with a specific Error reason
 	wrapper._onMessage(
-		JSON.stringify({ h: "1", x: { message: "stream ended" }, _: 1 })
+		JSON.stringify({ h: 1, x: { message: "stream ended" }, _: 1 })
 	)
 	assert.equal(
-		wrapper._anonymousChannels["1"],
+		wrapper._anonymousChannels.get(1),
 		undefined,
 		"channel should be closed"
 	)
@@ -1670,7 +1698,7 @@ test("integration: multiple events, requests, cancellation, and anonymous channe
 		ac.abort("user cancelled")
 		await assert.rejects(slowP, (err) => err.name === "RequestAbortedError")
 		assert.equal(
-			server._activeRequests[slowId],
+			server._activeRequests.get(slowId),
 			undefined,
 			"server should clean up active request after cancellation"
 		)
@@ -1686,7 +1714,7 @@ test("integration: multiple events, requests, cancellation, and anonymous channe
 	)
 
 	// Both sides reference the channel by the same request-ID key
-	const serverChan = server._anonymousChannels[String(streamChan._name)]
+	const serverChan = server._anonymousChannels.get(+streamChan._name)
 	assert.ok(serverChan, "server should hold a matching anonymous channel")
 
 	const iter = streamChan[Symbol.asyncIterator]()
@@ -1717,7 +1745,7 @@ test("integration: multiple events, requests, cancellation, and anonymous channe
 	assert.ok(log.includes("client:stream-done"))
 	// Channel is still open (normal completion does not close it)
 	assert.ok(
-		server._anonymousChannels[String(streamChan._name)],
+		server._anonymousChannels.get(+streamChan._name),
 		"channel stays open"
 	)
 })
@@ -1735,7 +1763,7 @@ test("[Symbol.asyncIterator] for-await loop can be used twice on the same channe
 	})
 
 	const chan = await client.request("open-stream")
-	const serverChan = server._anonymousChannels[String(chan._name)]
+	const serverChan = server._anonymousChannels.get(+chan._name)
 
 	// First for-await loop — server emits via microtask-deferred callbacks so
 	// that `pending` is set before the values arrive (fake socket is synchronous)
@@ -1751,7 +1779,7 @@ test("[Symbol.asyncIterator] for-await loop can be used twice on the same channe
 	}
 	assert.deepEqual(values1, [10])
 	assert.ok(
-		server._anonymousChannels[String(chan._name)],
+		server._anonymousChannels.get(+chan._name),
 		"channel should remain open after first loop"
 	)
 
@@ -1768,7 +1796,7 @@ test("[Symbol.asyncIterator] for-await loop can be used twice on the same channe
 	}
 	assert.deepEqual(values2, [20])
 	assert.ok(
-		server._anonymousChannels[String(chan._name)],
+		server._anonymousChannels.get(+chan._name),
 		"channel should remain open after second loop"
 	)
 })
@@ -1939,7 +1967,7 @@ test("anonymous channel request handler can create a nested anonymous channel", 
 	const outerChan = await client.request("open-stream")
 	assert.ok(outerChan.isAnonymous, "outer channel should be anonymous")
 
-	const serverOuterChan = server._anonymousChannels[String(outerChan._name)]
+	const serverOuterChan = server._anonymousChannels.get(+outerChan._name)
 	assert.ok(serverOuterChan, "server should hold the outer anonymous channel")
 
 	// 2. Client makes a request on the outer channel to open a nested channel
@@ -1951,7 +1979,7 @@ test("anonymous channel request handler can create a nested anonymous channel", 
 		"nested and outer channels must have different names"
 	)
 
-	const serverNestedChan = server._anonymousChannels[String(nestedChan._name)]
+	const serverNestedChan = server._anonymousChannels.get(+nestedChan._name)
 	assert.ok(serverNestedChan, "server should hold the nested anonymous channel")
 
 	// 3. Server emits an event on the nested channel; client receives it
@@ -1980,9 +2008,9 @@ test("anonymous channel request handler can create a nested anonymous channel", 
 
 	// 5. Closing the nested channel does not close the outer channel
 	nestedChan.close()
-	assert.equal(client._anonymousChannels[String(nestedChan._name)], undefined)
+	assert.equal(client._anonymousChannels.get(+nestedChan._name), undefined)
 	assert.ok(
-		client._anonymousChannels[String(outerChan._name)],
+		client._anonymousChannels.get(+outerChan._name),
 		"outer channel should still be open"
 	)
 })

@@ -99,18 +99,18 @@ The following message types are defined by ws-wrapper:
    ```
 
 1. **Anonymous Channel Event** - Like a named-channel event but uses `h` instead
-   of `c`. The `h` value is the channel ID (a string matching the original
+   of `c`. The `h` value is the channel ID (a number matching the original
    request ID).
 
    ```javascript
-   { "h": "123", "a": ["event_name", "arg1", "arg2"] }
+   { "h": 123, "a": ["event_name", "arg1", "arg2"] }
    ```
 
 1. **Anonymous Channel Request** - Like a named-channel request but uses `h`
    instead of `c`.
 
    ```javascript
-   { "i": 456, "h": "123", "a": ["event_name", "arg1"] }
+   { "i": 456, "h": 123, "a": ["event_name", "arg1"] }
    ```
 
    Responses to requests made on anonymous channels use the standard
@@ -125,10 +125,10 @@ The following message types are defined by ws-wrapper:
 
    ```javascript
    // Error abort (e.g. chan.abort(new Error("done")))
-   { "h": "123", "x": {"message": "done"}, "_": 1 }
+   { "h": 123, "x": {"message": "done"}, "_": 1 }
 
    // Default abort (e.g. chan.abort())
-   { "h": "123", "x": {"message": "Request aborted"}, "_": 1 }
+   { "h": 123, "x": {"message": "Request aborted"}, "_": 1 }
    ```
 
 If the message received by the WebSocket is not valid JSON or if the parsed

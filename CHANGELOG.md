@@ -8,6 +8,31 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-04-30
+
+### Added
+
+- TypeScript support for typed requests. (EXPERIMENTAL)
+- CI workflow to run linter and tests.
+- Optional `error` parameter to `WebSocketWrapper.abort`.
+- Missing JSDoc comments.
+- README library comparison table.
+
+### Changed
+
+- Wire protocol: `h` field is now numeric (numeric strings still accepted for
+  backward compatibility).
+- `package.json` `files` whitelist to reduce npm package size.
+- Improved browser detection for `options.errorToJSON`.
+- Clarified `bind()` documentation for pending outbound requests.
+- Documented event handler error behavior.
+
+### Fixed
+
+- Package exports bug.
+- `channel.of("")` now throws as expected.
+- `iterableHandler` now works for handlers that return Promises.
+
 ## [4.2.0] - 2026-04-16
 
 ### Added
@@ -103,7 +128,8 @@ and this project adheres to
 
 - Example app bug fixes.
 
-[unreleased]: https://github.com/bminer/ws-wrapper/compare/v4.2.0...HEAD
+[unreleased]: https://github.com/bminer/ws-wrapper/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/bminer/ws-wrapper/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/bminer/ws-wrapper/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/bminer/ws-wrapper/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/bminer/ws-wrapper/compare/v3.0.3...v4.0.0

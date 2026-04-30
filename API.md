@@ -333,6 +333,18 @@ This is useful for reconnecting or connecting to a different server.
   disconnected, one can simply bind a new WebSocket to the WebSocketWrapper. In
   this way, data queued to be sent while the connection was dead will be sent
   over the new WebSocket passed to the `bind` function.
+
+  **Note:** `bind()` does **not** reject any outbound requests that were still
+  pending on the previous socket. Those requests remain in the pending queue,
+  keyed by their original request IDs, and will continue to wait for a response,
+  time out, or be cancelled by their `AbortSignal`. Because the new remote peer
+  has no knowledge of those request IDs, in most cases the pending requests will
+  never resolve naturally. If you want them to fail immediately upon reconnect,
+  call `socket.abort()` (optionally with a custom Error) before or after
+  `bind()`. The outbound request ID counter (`_lastRequestId`) is intentionally
+  preserved across `bind()` so that newly-issued requests do not collide with
+  stale ones still in flight.
+
 - `socket.isConnecting` - checks the native WebSocket `readyState` and is `true`
   if and only if the state is CONNECTING.
 - `socket.isConnected` - checks the native WebSocket `readyState` is `true` if

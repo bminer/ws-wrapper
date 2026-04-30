@@ -257,9 +257,10 @@ export declare class WebSocketWrapper extends WebSocketChannel {
 	constructor(socket: WebSocketLike | null, options?: WebSocketWrapperOptions)
 
 	/**
-	 * The bound socket.  Assigning a new value calls {@link bind}.
+	 * The bound socket, or `null` if no socket is currently bound.
+	 * Assigning a new value calls {@link bind}.
 	 */
-	socket: WebSocketLike
+	socket: WebSocketLike | null
 
 	/** `true` while the socket's `readyState` is `CONNECTING`. */
 	readonly isConnecting: boolean

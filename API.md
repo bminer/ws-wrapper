@@ -58,9 +58,9 @@ be created to namespace events, despite using a single WebSocket connection.
 `const channel = socket.of(channelName)`
 
 Returns the channel with the specified `channelName`, creating it if needed.
-Throws a `TypeError` if `channelName` is an empty string.
-Every channel has the same EventEmitter-like API described below for sending and
-handling channel-specific events and requests.
+Throws a `TypeError` if `channelName` is an empty string. Every channel has the
+same EventEmitter-like API described below for sending and handling
+channel-specific events and requests.
 
 - `channel.name` Read-only `name` property matching the `channelName`. If the
   channel does not already exist, it is created.
@@ -325,8 +325,8 @@ following methods allow one to re-bind a new WebSocket or clear the send queue.
 This is useful for reconnecting or connecting to a different server.
 
 - `socket.abort(err)` Clears the send queue for this WebSocketWrapper and
-  rejects all Promises for pending requests with `err`. If `err` is not
-  provided or is not an `Error` instance, a `RequestAbortedError` is used.
+  rejects all Promises for pending requests with `err`. If `err` is not provided
+  or is not an `Error` instance, a `RequestAbortedError` is used.
 - `socket.bind(nativeWebSocket)` Binds this WebSocketWrapper to a new WebSocket.
   This can be useful when socket reconnection logic needs to be implemented.
   Instead of creating a new WebSocketWrapper each time a WebSocket is

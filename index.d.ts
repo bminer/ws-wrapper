@@ -23,10 +23,80 @@ export type MiddlewareFn = (
 ) => void
 
 /**
+ * A single event handler function. Using `any` for arguments allows concrete
+ * typed handlers (e.g. `(x: string) => void`) to be assignable to this type
+ * under TypeScript's function parameter variance rules.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type EventFn = (...args: any[]) => unknown
+
+/**
+ * A map of event names to their handler function types. Pass this as a type
+ * argument to {@link WebSocketChannel} or {@link WebSocketWrapper} to enable
+ * typed `on()`, `emit()`, and `request()` calls.
+ *
+ * - **`TRemoteEvents`** (first argument) — describes events handled by the
+ *   remote peer. Constrains `emit()` arguments and infers the return type of
+ *   `request()`.
+ * - **`TLocalEvents`** (second argument, optional) — describes events handled
+ *   by this side. Constrains the listener types passed to `on()` and `once()`.
+ *   Defaults to `TRemoteEvents`, which is correct for symmetric APIs where both
+ *   sides handle the same events.
+ *
+ * **Symmetric API** (both sides handle the same events — most common):
+ * ```ts
+ * interface ChatEvents {
+ *   msg: (from: string, text: string) => void
+ * }
+ * const socket = new WebSocketWrapper<ChatEvents>(rawSocket)
+ * socket.on("msg", (from, text) => console.log(from, text)) // args are typed
+ * socket.emit("msg", "alice", "hello")                      // args are typed
+ * ```
+ *
+ * **Asymmetric API** (client calls server, server calls client differently):
+ * ```ts
+ * interface ServerAPI { add: (a: number, b: number) => number }
+ * interface ClientAPI { notify: (msg: string) => void }
+ *
+ * // Client: remote=ServerAPI, local=ClientAPI
+ * const client = new WebSocketWrapper<ServerAPI, ClientAPI>(rawSocket)
+ * const sum = await client.request("add", 1, 2) // typed as number
+ * client.on("notify", (msg) => alert(msg))       // msg is string
+ *
+ * // Server: remote=ClientAPI, local=ServerAPI
+ * const server = new WebSocketWrapper<ClientAPI, ServerAPI>(rawSocket)
+ * server.on("add", (a, b) => a + b)              // a, b are number
+ * server.emit("notify", "hello")                 // arg is string
+ * ```
+ *
+ * To express a handler that returns an anonymous channel (for streaming), use
+ * `Promise<WebSocketChannel>` as the return type in the event map:
+ * ```ts
+ * interface ServerAPI {
+ *   streamNumbers: () => Promise<WebSocketChannel>
+ * }
+ * const chan = await socket.request("streamNumbers") // typed as WebSocketChannel
+ * for await (const n of chan) { ... }
+ * ```
+ *
+ * Requires TypeScript 4.5 or later (uses the built-in `Awaited` utility type).
+ */
+export type EventMap = Record<string, EventFn>
+
+/**
  * A namespaced channel backed by a {@link WebSocketWrapper}.
  * Exposes an EventEmitter-like API scoped to a channel name.
+ *
+ * @typeParam TRemoteEvents - Events handled by the remote peer (constrains
+ *   `emit()` and `request()`). Defaults to the loose {@link EventMap} type,
+ *   which allows any string key and degrades to untyped behaviour.
+ * @typeParam TLocalEvents - Events handled by this side (constrains `on()`
+ *   and `once()` listeners). Defaults to `TRemoteEvents`.
  */
-export declare class WebSocketChannel {
+export declare class WebSocketChannel<
+	TRemoteEvents extends EventMap = EventMap,
+	TLocalEvents extends EventMap = TRemoteEvents,
+> {
 	/** The channel namespace, or `null` for the root wrapper. */
 	readonly name: string | null
 
@@ -52,9 +122,8 @@ export declare class WebSocketChannel {
 
 	/**
 	 * Register a persistent event listener.
-	 * For reserved events (`open`, `close`, `error`, etc.) on the root wrapper
-	 * the listener receives the raw socket event object.  For all other events
-	 * the listener is called with the deserialized arguments from the remote peer.
+	 * For all ws-wrapper events, the listener is called with the deserialized
+	 * arguments from the remote peer.
 	 *
 	 * Inside a **request** handler `this` is a per-request context object that
 	 * inherits all channel methods and additionally exposes:
@@ -65,38 +134,67 @@ export declare class WebSocketChannel {
 	 *   requestor's `request()` Promise to resolve to the channel instead of a
 	 *   plain value.
 	 */
-	on(eventName: string, listener: (...args: unknown[]) => unknown): this
-	/** Alias for {@link on}. */
-	addListener(
-		eventName: string,
-		listener: (...args: unknown[]) => unknown
+	on<K extends keyof TLocalEvents & string>(
+		eventName: K,
+		listener: TLocalEvents[K]
 	): this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	on(eventName: string, listener: (...args: any[]) => any): this
+
+	/** Alias for {@link on}. */
+	addListener<K extends keyof TLocalEvents & string>(
+		eventName: K,
+		listener: TLocalEvents[K]
+	): this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	addListener(eventName: string, listener: (...args: any[]) => any): this
 
 	/** Register a one-time event listener that is removed after it fires once. */
-	once(eventName: string, listener: (...args: unknown[]) => unknown): this
+	once<K extends keyof TLocalEvents & string>(
+		eventName: K,
+		listener: TLocalEvents[K]
+	): this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	once(eventName: string, listener: (...args: any[]) => any): this
 
 	/** Remove a previously registered listener. */
-	removeListener(
-		eventName: string,
-		listener: (...args: unknown[]) => unknown
+	removeListener<K extends keyof TLocalEvents & string>(
+		eventName: K,
+		listener: TLocalEvents[K]
 	): this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	removeListener(eventName: string, listener: (...args: any[]) => any): this
+
 	/** Alias for {@link removeListener}. */
-	off(eventName: string, listener: (...args: unknown[]) => unknown): this
+	off<K extends keyof TLocalEvents & string>(
+		eventName: K,
+		listener: TLocalEvents[K]
+	): this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	off(eventName: string, listener: (...args: any[]) => any): this
 
 	/** Remove all listeners for `eventName`, or for all events if omitted. */
 	removeAllListeners(eventName?: string): this
 
 	/** Returns the names of all events that have registered listeners. */
-	eventNames(): string[]
+	eventNames(): (keyof TLocalEvents & string)[]
 
 	/** Returns the listeners registered for `eventName`. */
-	listeners(eventName: string): ((...args: unknown[]) => unknown)[]
+	listeners<K extends keyof TLocalEvents & string>(
+		eventName: K
+	): TLocalEvents[K][]
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	listeners(eventName: string): ((...args: any[]) => any)[]
 
 	/**
 	 * Emit an event to the remote peer over the WebSocket.
 	 * For reserved events on the root wrapper, emits locally instead.
 	 * Throws if the channel has been closed.
 	 */
+	emit<K extends keyof TRemoteEvents & string>(
+		eventName: K,
+		...args: Parameters<TRemoteEvents[K]>
+	): void
 	emit(eventName: string, ...args: unknown[]): void
 
 	/**
@@ -119,11 +217,18 @@ export declare class WebSocketChannel {
 
 	/**
 	 * Send a request to the remote peer and return a Promise that resolves
-	 * with the response value or with an anonymous {@link WebSocketChannel}
-	 * if the handler returned one. Rejects with {@link RequestTimeoutError}
-	 * on timeout, or {@link RequestAbortedError} if cancelled.
+	 * with the response value. Rejects with {@link RequestTimeoutError} on
+	 * timeout, or {@link RequestAbortedError} if cancelled.
 	 * Throws if the channel has been closed.
+	 *
+	 * When the remote handler returns an anonymous channel (via
+	 * `this.channel()`), declare its return type as `Promise<WebSocketChannel>`
+	 * in your event map and the resolved type will be `WebSocketChannel`.
 	 */
+	request<K extends keyof TRemoteEvents & string>(
+		eventName: K,
+		...args: Parameters<TRemoteEvents[K]>
+	): Promise<Awaited<ReturnType<TRemoteEvents[K]>>>
 	request(
 		eventName: string,
 		...args: unknown[]
@@ -229,15 +334,26 @@ export declare class RequestAbortedError extends Error {
  * Wraps a WebSocket with socket.io-like event handling, Promise-based
  * request/response, and named channels.
  *
+ * @typeParam TRemoteEvents - Events handled by the remote peer. Constrains
+ *   `emit()` arguments and infers the return type of `request()`.
+ * @typeParam TLocalEvents - Events handled by this side. Constrains listener
+ *   types passed to `on()` and `once()`. Defaults to `TRemoteEvents`.
+ *
  * @example
- * ```js
+ * ```ts
  * import WebSocketWrapper from "ws-wrapper"
+ * interface API { greet: (name: string) => string }
  * const socket = new WebSocket("wss://example.com")
- * const wrapper = new WebSocketWrapper(socket)
- * wrapper.on("open", () => wrapper.request("greet", "world").then(console.log))
+ * const wrapper = new WebSocketWrapper<API>(socket)
+ * wrapper.on("open", () =>
+ *   wrapper.request("greet", "world").then(console.log)
+ * )
  * ```
  */
-export declare class WebSocketWrapper extends WebSocketChannel {
+export declare class WebSocketWrapper<
+	TRemoteEvents extends EventMap = EventMap,
+	TLocalEvents extends EventMap = TRemoteEvents,
+> extends WebSocketChannel<TRemoteEvents, TLocalEvents> {
 	/**
 	 * Maximum number of messages to queue while the socket is not yet
 	 * connected.  Attempts to send beyond this limit throw an error.
@@ -305,27 +421,91 @@ export declare class WebSocketWrapper extends WebSocketChannel {
 
 	/**
 	 * Get (or lazily create) a {@link WebSocketChannel} for the given
-	 * namespace.  Returns `this` when `namespace` is `null` or `undefined`.
-	 * Throws a `TypeError` if `namespace` is an empty string.
+	 * namespace. The returned channel shares the same event-map type
+	 * parameters as this wrapper. Returns `this` when `namespace` is `null`
+	 * or `undefined`. Throws a `TypeError` if `namespace` is an empty string.
 	 */
-	of(namespace: string | null | undefined): WebSocketChannel
+	of(namespace: null | undefined): this
+	of(
+		namespace: string
+	): WebSocketChannel<TRemoteEvents, TLocalEvents>
+
+	/**
+	 * Reserved events fired locally on the root wrapper (not sent over the
+	 * wire). These overloads shadow the generic `on()` from
+	 * {@link WebSocketChannel} to provide accurate argument types.
+	 */
+	on(
+		eventName: "open" | "connect",
+		listener: (event: unknown) => void
+	): this
+	on(
+		eventName: "close" | "disconnect",
+		listener: (event: unknown, wasOpen: boolean) => void
+	): this
+	on(eventName: "error", listener: (event: unknown) => void): this
+	on(
+		eventName: "message",
+		listener: (event: { data: unknown }, data: unknown) => void
+	): this
+	on<K extends keyof TLocalEvents & string>(
+		eventName: K,
+		listener: TLocalEvents[K]
+	): this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	on(eventName: string, listener: (...args: any[]) => any): this
+
+	/** Reserved-event overloads for {@link once}. */
+	once(
+		eventName: "open" | "connect",
+		listener: (event: unknown) => void
+	): this
+	once(
+		eventName: "close" | "disconnect",
+		listener: (event: unknown, wasOpen: boolean) => void
+	): this
+	once(eventName: "error", listener: (event: unknown) => void): this
+	once(
+		eventName: "message",
+		listener: (event: { data: unknown }, data: unknown) => void
+	): this
+	once<K extends keyof TLocalEvents & string>(
+		eventName: K,
+		listener: TLocalEvents[K]
+	): this
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	once(eventName: string, listener: (...args: any[]) => any): this
 }
 
 export default WebSocketWrapper
 
 /**
  * Wraps an event handler function so that if it returns a sync or async
- * iterable, the values are streamed to the requestor via an anonymous channel
- * using the async iterator protocol. Each yielded value is emitted as a
- * `"next"` event with `{value, done: false}`. When the iterable is exhausted,
- * a final `"next"` with `{value: undefined, done: true}` is emitted and the
- * channel is closed.
+ * iterable (or a Promise that resolves to one), the values are streamed to the
+ * requestor via an anonymous channel using the async iterator protocol. Each
+ * yielded value is emitted as a `"next"` event with `{value, done: false}`.
+ * When the iterable is exhausted, a final `"next"` with
+ * `{value: undefined, done: true}` is emitted and the channel is closed.
  *
- * If the handler does not return a sync or async iterable Object, the request
+ * If the handler does not return a sync or async iterable, the request
  * Promise is rejected with a `TypeError`.
  *
  * Since the stream is one-way (handler → requestor), `yield` expressions in
  * generator handlers always evaluate to `undefined`.
+ *
+ * Declare the corresponding entry in your event map with a return type of
+ * `Promise<WebSocketChannel>` so that `request()` infers the resolved type
+ * correctly:
+ * ```ts
+ * interface ServerEvents {
+ *   streamNumbers: () => Promise<WebSocketChannel>
+ * }
+ * socket.on("streamNumbers", iterableHandler(function* () {
+ *   for (let i = 1; i <= 100; i++) yield i
+ * }))
+ * ```
+ *
+ * @typeParam T - The type of values yielded by the iterable.
  *
  * @example
  * socket.on("data-stream", iterableHandler(function* (filter) {
@@ -334,6 +514,13 @@ export default WebSocketWrapper
  *   }
  * }))
  */
-export function iterableHandler(
-	fn: (...args: unknown[]) => Iterable<unknown> | AsyncIterable<unknown>
-): (...args: unknown[]) => unknown
+export function iterableHandler<T = unknown>(
+	fn: (
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		...args: any[]
+	) =>
+		| Iterable<T>
+		| AsyncIterable<T>
+		| Promise<Iterable<T> | AsyncIterable<T>>
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): (...args: any[]) => Promise<WebSocketChannel>

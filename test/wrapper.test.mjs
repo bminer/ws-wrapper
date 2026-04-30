@@ -507,6 +507,25 @@ test("abort() rejects all pending requests", async () => {
 	await assert.rejects(p2, (err) => err.name === "RequestAbortedError")
 })
 
+test("abort(err) rejects all pending requests with the provided error", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p1 = wrapper.request("a")
+	const p2 = wrapper.request("b")
+	const customErr = new Error("connection lost")
+	wrapper.abort(customErr)
+	await assert.rejects(p1, (err) => err === customErr)
+	await assert.rejects(p2, (err) => err === customErr)
+})
+
+test("abort() with non-Error argument falls back to RequestAbortedError", async () => {
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const p1 = wrapper.request("a")
+	wrapper.abort("not an error")
+	await assert.rejects(p1, (err) => err.name === "RequestAbortedError")
+})
+
 test("abort() clears the pending send queue", () => {
 	const wrapper = new WebSocketWrapper(null, {})
 	wrapper.send("queued")

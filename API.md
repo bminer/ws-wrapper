@@ -323,8 +323,9 @@ WebSocket is open, this queue is flushed until the connection is lost. The
 following methods allow one to re-bind a new WebSocket or clear the send queue.
 This is useful for reconnecting or connecting to a different server.
 
-- `socket.abort()` Clears the send queue for this WebSocketWrapper and rejects
-  all Promises for pending requests.
+- `socket.abort(err)` Clears the send queue for this WebSocketWrapper and
+  rejects all Promises for pending requests with `err`. If `err` is not
+  provided or is not an `Error` instance, a `RequestAbortedError` is used.
 - `socket.bind(nativeWebSocket)` Binds this WebSocketWrapper to a new WebSocket.
   This can be useful when socket reconnection logic needs to be implemented.
   Instead of creating a new WebSocketWrapper each time a WebSocket is

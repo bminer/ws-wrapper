@@ -296,8 +296,9 @@ export declare class WebSocketWrapper extends WebSocketChannel {
 	/**
 	 * Immediately reject all pending outbound requests and clear the send
 	 * queue. Useful when tearing down a connection without waiting for
-	 * individual request timeouts. The optional `err` parameter is accepted
-	 * for API compatibility with {@link WebSocketChannel.abort} but is ignored.
+	 * individual request timeouts. If `err` is provided and is an `Error`
+	 * instance, it is used to reject all pending requests; otherwise a
+	 * {@link RequestAbortedError} is used.
 	 */
 	abort(err?: Error): this
 

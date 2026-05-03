@@ -1,6 +1,5 @@
 /* This chat server uses "ws" for Node.js WebSockets and the "koa" web
-	framework. "node-module-concat" is used to bundle the client-side code at
-	run-time.
+	framework.
 
 	This example does *NOT* use ws-server-wrapper.  For an example using
 	ws-server-wrapper, visit the ws-server-wrapper Github repo.

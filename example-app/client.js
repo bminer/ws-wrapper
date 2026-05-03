@@ -1,4 +1,4 @@
-import WebSocketWrapper from "../lib/wrapper"
+import WebSocketWrapper from "../lib/wrapper.mjs"
 
 // Create WebSocketWrapper
 const socket = new WebSocketWrapper(new WebSocket("ws://" + location.host))

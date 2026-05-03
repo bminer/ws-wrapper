@@ -1667,6 +1667,158 @@ function makeConnectedPair() {
 	return { server, client, serverSocket, clientSocket }
 }
 
+// ---------------------------------------------------------------------------
+// Signal abort after request resolves to anonymous channel
+// ---------------------------------------------------------------------------
+
+test("signal abort after anon chan received: closes channel and sends cancel-anon not cancel-request", async () => {
+	if (typeof AbortController !== "function") return
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ac = new AbortController()
+	const p = wrapper.signal(ac.signal).request("open-stream")
+	// Capture the original request id before simulating the server response
+	const reqId = JSON.parse(socket.sent[0]).i
+	wrapper._onMessage(JSON.stringify({ i: reqId, h: 1 }))
+	const chan = await p
+	assert.ok(chan.isAnonymous, "should receive an anonymous channel")
+	assert.ok(
+		wrapper._anonymousChannels.get(reqId),
+		"channel should be registered"
+	)
+
+	const sentBefore = socket.sent.length
+	ac.abort()
+
+	// Requestor-side channel must be removed
+	assert.equal(
+		wrapper._anonymousChannels.get(reqId),
+		undefined,
+		"channel should be closed after signal abort"
+	)
+	// Exactly one additional message must have been sent
+	assert.equal(
+		socket.sent.length,
+		sentBefore + 1,
+		"exactly one cancel message should be sent"
+	)
+	const cancelMsg = lastSent(socket)
+	// Must be a cancel-anon {h, x}, not a cancel-request {i, x}
+	assert.equal(cancelMsg.h, reqId, "cancel must target the anonymous channel")
+	assert.ok(cancelMsg.x != null, "cancel message must include a reason")
+	assert.equal(
+		cancelMsg.i,
+		undefined,
+		"cancel message must not carry the original request id"
+	)
+})
+
+test("signal abort after anon chan received: requestor-side closeSignal.reason is the signal reason", async () => {
+	if (typeof AbortController !== "function") return
+	const socket = makeSocket()
+	const wrapper = new WebSocketWrapper(socket, {})
+	const ac = new AbortController()
+	const p = wrapper.signal(ac.signal).request("open-stream")
+	wrapper._onMessage(JSON.stringify({ i: 1, h: 1 }))
+	const chan = await p
+
+	const originalError = new Error("original reason")
+	ac.abort(originalError)
+
+	// _onRequestAbort forwards signal.reason to chan.abort(), which passes it
+	// through close(), so closeSignal.reason equals the original abort reason
+	assert.ok(chan.closeSignal.aborted, "closeSignal should be aborted")
+	assert.equal(
+		chan.closeSignal.reason,
+		originalError,
+		"requestor-side closeSignal.reason should be the original signal reason"
+	)
+})
+
+test("signal abort after anon chan received (two-sided): server channel is closed and closeSignal is aborted", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on("open-stream", function () {
+		return this.channel()
+	})
+
+	const ac = new AbortController()
+	const chan = await client.signal(ac.signal).request("open-stream")
+	const serverChan = server._anonymousChannels.get(+chan._name)
+	assert.ok(serverChan, "server should hold the anonymous channel")
+
+	ac.abort()
+
+	assert.equal(
+		server._anonymousChannels.get(+chan._name),
+		undefined,
+		"server-side channel should be removed after signal abort"
+	)
+	assert.ok(
+		serverChan.closeSignal.aborted,
+		"server-side closeSignal should be aborted"
+	)
+})
+
+test("signal abort with Error reason (two-sided): server closeSignal.reason is the reconstructed Error", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on("open-stream", function () {
+		return this.channel()
+	})
+
+	const ac = new AbortController()
+	const chan = await client.signal(ac.signal).request("open-stream")
+	const serverChan = server._anonymousChannels.get(+chan._name)
+
+	ac.abort(new Error("user bailed"))
+
+	// The original Error is serialized into {h,x,_:1} and reconstructed on the
+	// server, so closeSignal.reason carries the matching message
+	assert.ok(
+		serverChan.closeSignal.aborted,
+		"server-side closeSignal should be aborted"
+	)
+	assert.ok(
+		serverChan.closeSignal.reason instanceof Error,
+		"server closeSignal.reason should be a reconstructed Error"
+	)
+	assert.equal(
+		serverChan.closeSignal.reason.message,
+		"user bailed",
+		"server closeSignal.reason message should match the original abort reason"
+	)
+})
+
+test("signal abort with string reason (two-sided): server closeSignal.reason is the string reason", async () => {
+	if (typeof AbortController !== "function") return
+	const { server, client } = makeConnectedPair()
+
+	server.on("open-stream", function () {
+		return this.channel()
+	})
+
+	const ac = new AbortController()
+	const chan = await client.signal(ac.signal).request("open-stream")
+	const serverChan = server._anonymousChannels.get(+chan._name)
+
+	ac.abort("plain string reason")
+
+	// String reasons are sent as-is in x (no _ flag); server receives them
+	// unchanged and forwards to closeSignal.reason
+	assert.ok(
+		serverChan.closeSignal.aborted,
+		"server-side closeSignal should be aborted"
+	)
+	assert.equal(
+		serverChan.closeSignal.reason,
+		"plain string reason",
+		"server closeSignal.reason should equal the original string abort reason"
+	)
+})
+
 test("integration: multiple events, requests, cancellation, and anonymous channel", async () => {
 	const { server, client } = makeConnectedPair()
 	const log = []
@@ -2180,4 +2332,32 @@ test("iterableHandler: cancellation from requestor stops iteration", async () =>
 
 test("iterableHandler: throws TypeError when fn is not a function", () => {
 	assert.throws(() => iterableHandler(42), TypeError)
+})
+
+// ---------------------------------------------------------------------------
+// Package-level named exports
+// ---------------------------------------------------------------------------
+
+test("exports RequestTimeoutError", async () => {
+	const module = await import("../index.mjs")
+	assert.ok(module.RequestTimeoutError)
+	assert.ok(module.RequestTimeoutError.prototype instanceof Error)
+})
+
+test("exports RequestAbortedError", async () => {
+	const module = await import("../index.mjs")
+	assert.ok(module.RequestAbortedError)
+	assert.ok(module.RequestAbortedError.prototype instanceof Error)
+})
+
+test("exports iterableHandler", async () => {
+	const module = await import("../index.mjs")
+	assert.ok(module.iterableHandler)
+	assert.equal(typeof module.iterableHandler, "function")
+})
+
+test("exports default WebSocketWrapper", async () => {
+	const module = await import("../index.mjs")
+	assert.ok(module.default)
+	assert.equal(typeof module.default, "function")
 })

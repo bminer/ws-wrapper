@@ -21,7 +21,8 @@ The following message types are defined by ws-wrapper:
    name and some data, passed as arguments to the event handler.
 
 1. **Request** - Identified by an Object with `a` and `i` keys where `i` refers
-   to the unique request identifier. The channel name is optional.
+   to the unique request identifier. `i` must be a positive integer. The channel
+   name is optional.
 
    ```javascript
    {

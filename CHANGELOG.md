@@ -8,6 +8,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [4.3.1] - 2026-05-03
+
+### Changed
+
+- Request IDs must now be positive integers (0 is no longer allowed).
+- Removed unneeded processing of event handler arguments.
+
+### Fixed
+
+- `RequestAbortedError` and `RequestTimeoutError` are now properly exported.
+- For anonymous channels inheriting the `AbortSignal` from the initial request,
+  the abort reason is now correctly forwarded to the remote and to `closeSignal`.
+
 ## [4.3.0] - 2026-04-30
 
 ### Added
@@ -128,7 +141,8 @@ and this project adheres to
 
 - Example app bug fixes.
 
-[unreleased]: https://github.com/bminer/ws-wrapper/compare/v4.3.0...HEAD
+[unreleased]: https://github.com/bminer/ws-wrapper/compare/v4.3.1...HEAD
+[4.3.1]: https://github.com/bminer/ws-wrapper/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/bminer/ws-wrapper/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/bminer/ws-wrapper/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/bminer/ws-wrapper/compare/v4.0.0...v4.1.0

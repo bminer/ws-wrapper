@@ -991,7 +991,8 @@ test("emit on anonymous channel before it is open throws", () => {
 	const socket = makeSocket()
 	const wrapper = new WebSocketWrapper(socket, {})
 	// Create an unregistered anonymous channel directly
-	const chan = new (wrapper.of("x").constructor)("99", wrapper)
+	const Channel = wrapper.of("x").constructor
+	const chan = new Channel("99", wrapper)
 	chan._isAnonymous = true
 	assert.throws(() => chan.emit("test"), /closed/)
 })
